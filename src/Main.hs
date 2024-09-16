@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Example (run)
+import SecondExample (run)
 
 main :: IO ()
 main = run
