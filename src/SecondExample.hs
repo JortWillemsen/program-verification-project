@@ -1,11 +1,19 @@
 module SecondExample where
 
 import GCLParser.Parser (parseGCLfile)
-import GCLParser.PrettyPrint (ppProgram2String)
+import GCLParser.GCLDatatype (Program(..))
 
 run :: IO ()
 run = do
-  gcl <- parseGCLfile "examples/benchmark/bsort.gcl"
-
-  let (Right prg) = gcl
-  putStrLn . ppProgram2String $ prg
+  result <- parseGCLfile "examples/min.gcl"
+  
+  case result of
+    Left err -> do
+      putStrLn "Failed to parse the GCL file:"
+      putStrLn err
+    Right gcl -> do
+      -- Extract the stmt from the parsed Program
+      let statement = stmt gcl
+      
+      -- Print the statement
+      print statement
