@@ -20,8 +20,12 @@ run = do
 
 exprToZ3 :: (MonadZ3 z3) => Expr -> z3 AST
 exprToZ3 LitNull = undefined
-exprToZ3 (Forall str e) = undefined
-exprToZ3 (Parens e) = undefined
+exprToZ3 (Forall str e) = do
+  qVar <- mkFreshIntVar str
+  pat <- mkPattern [qVar]
+  z3Expr <- exprToZ3 e
+  mkForallConst [pat] [] z3Expr
+exprToZ3 (Parens e) = exprToZ3 e
 exprToZ3 (ArrayElem e1 e2) = undefined
 exprToZ3 (OpNeg e) = undefined
 exprToZ3 (Exists str e) = undefined
@@ -29,7 +33,7 @@ exprToZ3 (SizeOf e) = undefined
 exprToZ3 (RepBy e1 e2 e3) = undefined
 exprToZ3 (Cond e1 e2 e3) = undefined
 exprToZ3 (NewStore e) = undefined
-exprToZ3 (Dereference _) = undefined
+exprToZ3 (Dereference str) = undefined
 exprToZ3 (LitI i) = mkInteger (toInteger i)
 exprToZ3 (LitB True) = mkTrue
 exprToZ3 (LitB False) = mkFalse
