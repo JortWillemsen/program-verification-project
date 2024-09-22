@@ -26,12 +26,29 @@ exprToZ3 (Forall str e) = do
   z3Expr <- exprToZ3 e
   mkForallConst [pat] [] z3Expr
 exprToZ3 (Parens e) = exprToZ3 e
-exprToZ3 (ArrayElem e1 e2) = undefined
-exprToZ3 (OpNeg e) = undefined
-exprToZ3 (Exists str e) = undefined
-exprToZ3 (SizeOf e) = undefined
-exprToZ3 (RepBy e1 e2 e3) = undefined
-exprToZ3 (Cond e1 e2 e3) = undefined
+exprToZ3 (ArrayElem e1 i) = do
+  z3Arr <- exprToZ3 e1
+  z3Index <- exprToZ3 i
+  mkSelect z3Arr z3Index
+exprToZ3 (OpNeg e) = do
+  z3Expr <- exprToZ3 e
+  mkUnaryMinus z3Expr
+exprToZ3 (Exists str e) = do
+  qVar <- mkFreshIntVar str
+  pat <- mkPattern [qVar]
+  z3Expr <- exprToZ3 e
+  mkExistsConst [pat] [] z3Expr
+exprToZ3 (SizeOf e) = mkIntNum $ sizeOfExpr e
+exprToZ3 (RepBy arr i v) = do
+  arrZ3 <- exprToZ3 arr
+  indexZ3 <- exprToZ3 i
+  valueZ3 <- exprToZ3 v
+  mkStore arrZ3 indexZ3 valueZ3
+exprToZ3 (Cond g e1 e2) = do
+  guardZ3 <- exprToZ3 g
+  thenZ3 <- exprToZ3 e1
+  elseZ3 <- exprToZ3 e2
+  mkIte guardZ3 thenZ3 elseZ3
 exprToZ3 (NewStore e) = undefined
 exprToZ3 (Dereference str) = undefined
 exprToZ3 (LitI i) = mkInteger (toInteger i)
@@ -55,6 +72,23 @@ exprToZ3 (BinopExpr op e1 e2) = do
     Or -> mkOr [z3e1, z3e2]
     Implication -> mkImplies z3e1 z3e2
     Alias -> undefined
+
+sizeOfExpr :: Expr -> Int
+sizeOfExpr (Var _) = 1
+sizeOfExpr (LitI _) = 1
+sizeOfExpr (LitB _) = 1
+sizeOfExpr LitNull = 1
+sizeOfExpr (Parens e) = sizeOfExpr e
+sizeOfExpr (ArrayElem e1 e2) = 1 + sizeOfExpr e1 + sizeOfExpr e2
+sizeOfExpr (OpNeg e) = 1 + sizeOfExpr e
+sizeOfExpr (BinopExpr _ e1 e2) = 1 + sizeOfExpr e1 + sizeOfExpr e2
+sizeOfExpr (Forall _ e) = 1 + sizeOfExpr e
+sizeOfExpr (Exists _ e) = 1 + sizeOfExpr e
+sizeOfExpr (SizeOf e) = 1 + sizeOfExpr e
+sizeOfExpr (RepBy e1 e2 e3) = 1 + sizeOfExpr e1 + sizeOfExpr e2 + sizeOfExpr e3
+sizeOfExpr (Cond e1 e2 e3) = 1 + sizeOfExpr e1 + sizeOfExpr e2 + sizeOfExpr e3
+sizeOfExpr (NewStore e) = 1 + sizeOfExpr e
+sizeOfExpr (Dereference _) = 1
 
 -- Function to recursively handle and pattern match on Stmt
 processStmt :: Stmt -> IO ()
