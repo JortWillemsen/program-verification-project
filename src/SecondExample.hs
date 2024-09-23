@@ -1,3 +1,5 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 module SecondExample where
 
 import Control.Monad.IO.Class
@@ -14,12 +16,41 @@ run = do
       putStrLn "Failed to parse the GCL file:"
       putStrLn err
     Right gcl -> do
-      processStmt $ stmt gcl
+      -- let z3 = exprToZ3 $ stmt gcl
+      print $ stmt gcl
 
-  runZ3
+-- data Stmt
+--   = Skip
+--   | Assert Expr
+--   | Assume Expr
+--   | Assign String Expr
+--   | AAssign String Expr Expr
+--   | DrefAssign String Expr
+--   | Seq Stmt Stmt
+--   | IfThenElse Expr Stmt Stmt
+--   | While Expr Stmt
+--   | Block [VarDeclaration] Stmt
+--   | TryCatch String Stmt Stmt
+
+--    | Call       [String]         [Expr] String
+
+-- runZ3
+stmtToZ3 :: (MonadZ3 z3) => Stmt -> z3 AST
+stmtToZ3 Skip = mkTrue
+stmtToZ3 (Assert e) = exprToZ3 e
+stmtToZ3 (Assume e) = exprToZ3 e
+stmtToZ3 (Assign str e) = undefined
+stmtToZ3 (AAssign str e1 e2) = undefined
+stmtToZ3 (DrefAssign str e) = undefined -- optional
+stmtToZ3 (Seq stmt1 stmt2) = do
+  undefined
+stmtToZ3 (IfThenElse e stmt1 stmt2) = undefined
+stmtToZ3 (While e stmt) = undefined
+stmtToZ3 (Block vars stmt) = undefined
+stmtToZ3 (TryCatch str stmt1 stmt2) = undefined
 
 exprToZ3 :: (MonadZ3 z3) => Expr -> z3 AST
-exprToZ3 LitNull = undefined
+exprToZ3 LitNull = undefined -- optional
 exprToZ3 (Forall str e) = do
   qVar <- mkFreshIntVar str
   pat <- mkPattern [qVar]
@@ -49,8 +80,8 @@ exprToZ3 (Cond g e1 e2) = do
   thenZ3 <- exprToZ3 e1
   elseZ3 <- exprToZ3 e2
   mkIte guardZ3 thenZ3 elseZ3
-exprToZ3 (NewStore e) = undefined
-exprToZ3 (Dereference str) = undefined
+exprToZ3 (NewStore e) = undefined -- optional
+exprToZ3 (Dereference str) = undefined -- optional
 exprToZ3 (LitI i) = mkInteger (toInteger i)
 exprToZ3 (LitB True) = mkTrue
 exprToZ3 (LitB False) = mkFalse
