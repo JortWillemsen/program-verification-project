@@ -2,7 +2,7 @@
 
 module FormulaProcessor where
 
-import GCLParser.GCLDatatype (Expr (..), Program (..), Stmt (..), opAnd, opImplication)
+import GCLParser.GCLDatatype (Expr (..), Program (..), Stmt (..), opAnd, opEqual, opImplication)
 
 type PostCondition = Expr
 
@@ -27,7 +27,7 @@ wlp (Seq s1 s2) pc = wlp s1 $ wlp s2 pc
 wlp Skip pc = pc
 wlp (Assume e) pc = opImplication e pc -- e -> pc
 wlp (Assert e) pc = opAnd e pc -- e /\ pc
-wlp (Assign str e) pc = undefined
+wlp (Assign str e) pc = opEqual (Var str) e -- x = 1
 wlp (AAssign str e1 e2) pc = undefined
 wlp (DrefAssign str e) pc = undefined -- optional
 wlp (IfThenElse e s1 s2) pc = undefined
