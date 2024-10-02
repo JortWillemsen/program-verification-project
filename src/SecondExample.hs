@@ -3,6 +3,7 @@
 module SecondExample where
 
 import Control.Monad.IO.Class
+import FormulaProcessor (wlp)
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 import GCLParser.Parser (parseGCLfile)
 import Z3.Monad
@@ -17,7 +18,27 @@ run = do
       putStrLn err
     Right gcl -> do
       -- let z3 = exprToZ3 $ stmt gcl
-      print $ stmt gcl
+      let processedWlp = wlp (stmt gcl) (LitB True)
+      evalZ3 $ do
+        liftIO $ putStrLn $ show processedWlp
+        z3Expr <- exprToZ3 processedWlp
+
+        liftIO $ putStrLn $ show z3Expr
+
+        assert z3Expr
+
+        resultZ3 <- check
+
+        case resultZ3 of
+          Sat -> do
+            mbModel <- getModel -- getModel returns Maybe Model
+            case mbModel of
+              (_, Just model) -> do
+                modelStr <- modelToString model -- Convert model to string
+                liftIO $ putStrLn "Model:"
+                liftIO $ putStrLn modelStr
+              (_, Nothing) -> liftIO $ putStrLn "No model found"
+          _ -> return ()
 
 -- data Stmt
 --   = Skip

@@ -35,10 +35,14 @@ wlp Skip pc = pc
 wlp (Assert e) pc = BinopExpr And e pc
 wlp (Assume e) pc = BinopExpr Implication e pc
 wlp (Assign str e) pc = replaceAssign pc str e
-wlp (AAssign str e1 e2) pc = undefined
-wlp (DrefAssign s e) pc = undefined
+wlp (AAssign str e1 e2) pc = undefined -- optional
+wlp (DrefAssign s e) pc = undefined -- optional
 wlp (Seq s1 s2) pc = wlp s1 (wlp s2 pc)
-wlp (IfThenElse e s1 s2) pc = undefined
+wlp (IfThenElse e s1 s2) pc =
+  BinopExpr
+    Or
+    (BinopExpr Implication e (wlp s1 pc))
+    (BinopExpr Implication (OpNeg e) (wlp s2 pc))
 wlp s@(While {}) pc = reduceLoop s pc
 wlp (Block decls s) pc = undefined
 wlp (TryCatch str s1 s2) pc = undefined
@@ -101,21 +105,6 @@ reduceLoop (While e s1) pc =
 --     | Cond               Expr   Expr   Expr
 --     | NewStore           Expr
 --     | Dereference        String
-
--- replaceAssign (Var idtje) str e =
--- wlp env (Seq s1 s2) pc = wlp (snd calc2) s1 $ fst calc2
---   where
---     calc2 = wlp env s2 pc
--- wlp env (Assign str e) pc = (opEqual (Var str) e, insert str e env) -- x = e
--- wlp env (AAssign str e1 e2) pc = undefined -- x[e1] = e2
--- wlp env (DrefAssign str e) pc = undefined -- optional
--- wlp env (IfThenElse e s1 s2) pc = undefined -- if (e) then s1 else s2
--- wlp env (While e s) pc = undefined -- while (e) s
--- wlp env (Block vars s) pc = undefined -- {vars s}
--- wlp env (TryCatch str s1 s2) pc = undefined -- ?
--- wlp _ Skip pc = pc
--- wlp _ (Assume e) pc = opImplication e pc -- e -> pc
--- wlp _ (Assert e) pc = opAnd e pc -- e /\ pc
 
 -- data Expr
 --   = Var String
