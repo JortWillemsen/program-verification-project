@@ -1,8 +1,11 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module SecondExample where
 
 import Control.Monad.IO.Class
+import Control.Monad.State
+import qualified Data.Map as M
 import FormulaProcessor (wlp)
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 import GCLParser.Parser (parseGCLfile)
@@ -10,7 +13,7 @@ import Z3.Monad
 
 run :: IO ()
 run = do
-  result <- parseGCLfile "examples/min.gcl"
+  result <- parseGCLfile "examples/second_test.gcl"
 
   case result of
     Left err -> do
@@ -20,8 +23,15 @@ run = do
       -- let z3 = exprToZ3 $ stmt gcl
       let processedWlp = wlp (stmt gcl) (LitB True)
       evalZ3 $ do
-        liftIO $ putStrLn $ show processedWlp
-        z3Expr <- exprToZ3 processedWlp
+        env1 <- createEnv processedWlp M.empty
+        z3Expr <- exprToZ3 processedWlp env1
+
+        liftIO $ putStrLn $ "Z3 Expression: " ++ show z3Expr
+        -- Convert Z3 expression to a readable string
+        z3ExprStr <- astToString z3Expr
+        liftIO $ putStrLn $ "Z3 Expression: " ++ z3ExprStr
+
+        x <- mkFreshIntVar "x"
 
         liftIO $ putStrLn $ show z3Expr
 
@@ -52,64 +62,101 @@ run = do
 --   | While Expr Stmt
 --   | Block [VarDeclaration] Stmt
 --   | TryCatch String Stmt Stmt
+--   | Call       [String]         [Expr] String
 
---    | Call       [String]         [Expr] String
+type Env = M.Map String AST
 
--- runZ3
-stmtToZ3 :: (MonadZ3 z3) => Stmt -> z3 AST
-stmtToZ3 Skip = mkTrue
-stmtToZ3 (Assert e) = exprToZ3 e
-stmtToZ3 (Assume e) = exprToZ3 e
-stmtToZ3 (Assign str e) = undefined
-stmtToZ3 (AAssign str e1 e2) = undefined
-stmtToZ3 (DrefAssign str e) = undefined -- optional
-stmtToZ3 (Seq stmt1 stmt2) = do
-  undefined
-stmtToZ3 (IfThenElse e stmt1 stmt2) = undefined
-stmtToZ3 (While e stmt) = undefined
-stmtToZ3 (Block vars stmt) = undefined
-stmtToZ3 (TryCatch str stmt1 stmt2) = undefined
+-- Klopt ForAll wel?
 
-exprToZ3 :: (MonadZ3 z3) => Expr -> z3 AST
-exprToZ3 LitNull = undefined -- optional
-exprToZ3 (Forall str e) = do
-  qVar <- mkFreshIntVar str
-  pat <- mkPattern [qVar]
-  z3Expr <- exprToZ3 e
-  mkForallConst [pat] [] z3Expr
-exprToZ3 (Parens e) = exprToZ3 e
-exprToZ3 (ArrayElem e1 i) = do
-  z3Arr <- exprToZ3 e1
-  z3Index <- exprToZ3 i
+createEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
+createEnv LitNull cEnv = return cEnv
+createEnv (Forall str e) cEnv = case M.lookup str cEnv of
+  Just _ -> createEnv e cEnv
+  Nothing -> do
+    freshVar <- mkFreshIntVar str
+    createEnv e $ M.insert str freshVar cEnv
+createEnv (Exists str e) cEnv = case M.lookup str cEnv of
+  Just _ -> createEnv e cEnv
+  Nothing -> do
+    freshVar <- mkFreshIntVar str
+    createEnv e $ M.insert str freshVar cEnv
+createEnv (Var n) cEnv = case M.lookup n cEnv of
+  Just _ -> return cEnv
+  Nothing -> do
+    freshVar <- mkFreshIntVar n
+    return $ M.insert n freshVar cEnv
+createEnv (ArrayElem e1 i) cEnv = do
+  env' <- createEnv e1 cEnv
+  createEnv i env'
+createEnv (Parens e) cEnv = createEnv e cEnv
+createEnv (OpNeg e) cEnv = createEnv e cEnv
+createEnv (BinopExpr _ e1 e2) cEnv = do
+  env1 <- createEnv e1 cEnv
+  createEnv e2 env1
+createEnv (RepBy arr i v) cEnv = do
+  env1 <- createEnv arr cEnv
+  env2 <- createEnv i env1
+  createEnv v env2
+createEnv (Cond g e1 e2) cEnv = do
+  env1 <- createEnv g cEnv
+  env2 <- createEnv e1 env1
+  createEnv e2 env2
+createEnv (SizeOf e) cEnv = createEnv e cEnv
+createEnv (NewStore e) cEnv = createEnv e cEnv
+createEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as is
+createEnv (LitI _) cEnv = return cEnv
+createEnv (LitB _) cEnv = return cEnv
+
+-- var <-
+-- M.insert str
+
+exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
+exprToZ3 LitNull env = undefined -- optional
+exprToZ3 (Forall str e) env = case M.lookup str env of
+  Just z3var -> do
+    pat <- mkPattern [z3var]
+    z3Expr <- exprToZ3 e env
+    mkForallConst [pat] [] z3Expr
+  Nothing -> do
+    error "dit hoort niet te gebeuren"
+exprToZ3 (Parens e) env = exprToZ3 e env
+exprToZ3 (ArrayElem e1 i) env = do
+  z3Arr <- exprToZ3 e1 env
+  z3Index <- exprToZ3 i env
   mkSelect z3Arr z3Index
-exprToZ3 (OpNeg e) = do
-  z3Expr <- exprToZ3 e
+exprToZ3 (OpNeg e) env = do
+  z3Expr <- exprToZ3 e env
   mkUnaryMinus z3Expr
-exprToZ3 (Exists str e) = do
+exprToZ3 (Exists str e) env = do
   qVar <- mkFreshIntVar str
   pat <- mkPattern [qVar]
-  z3Expr <- exprToZ3 e
+  z3Expr <- exprToZ3 e env
   mkExistsConst [pat] [] z3Expr
-exprToZ3 (SizeOf e) = mkIntNum $ sizeOfExpr e
-exprToZ3 (RepBy arr i v) = do
-  arrZ3 <- exprToZ3 arr
-  indexZ3 <- exprToZ3 i
-  valueZ3 <- exprToZ3 v
+exprToZ3 (SizeOf e) env = mkIntNum $ sizeOfExpr e
+exprToZ3 (RepBy arr i v) env = do
+  arrZ3 <- exprToZ3 arr env
+  indexZ3 <- exprToZ3 i env
+  valueZ3 <- exprToZ3 v env
   mkStore arrZ3 indexZ3 valueZ3
-exprToZ3 (Cond g e1 e2) = do
-  guardZ3 <- exprToZ3 g
-  thenZ3 <- exprToZ3 e1
-  elseZ3 <- exprToZ3 e2
+exprToZ3 (Cond g e1 e2) env = do
+  guardZ3 <- exprToZ3 g env
+  thenZ3 <- exprToZ3 e1 env
+  elseZ3 <- exprToZ3 e2 env
   mkIte guardZ3 thenZ3 elseZ3
-exprToZ3 (NewStore e) = undefined -- optional
-exprToZ3 (Dereference str) = undefined -- optional
-exprToZ3 (LitI i) = mkInteger (toInteger i)
-exprToZ3 (LitB True) = mkTrue
-exprToZ3 (LitB False) = mkFalse
-exprToZ3 (Var n) = mkFreshIntVar n -- All vars are integers right?
-exprToZ3 (BinopExpr op e1 e2) = do
-  z3e1 <- exprToZ3 e1
-  z3e2 <- exprToZ3 e2
+exprToZ3 (NewStore e) env = undefined -- optional
+exprToZ3 (Dereference str) env = undefined -- optional
+exprToZ3 (LitI i) env = mkInteger (toInteger i)
+exprToZ3 (LitB True) env = mkTrue
+exprToZ3 (LitB False) env = mkFalse
+-- exprToZ3 (Var n) = mkFreshIntVar n -- All vars are integers right?
+exprToZ3 (Var n) env = do
+  case M.lookup n env of
+    Just z3Var -> return z3Var -- Return existing Z3 variable if found
+    Nothing -> do
+      error "dit hoort niet te gebeuren (Var n)"
+exprToZ3 (BinopExpr op e1 e2) env = do
+  z3e1 <- exprToZ3 e1 env
+  z3e2 <- exprToZ3 e2 env
   case op of
     Plus -> mkAdd [z3e1, z3e2]
     Minus -> mkSub [z3e1, z3e2]
@@ -141,89 +188,3 @@ sizeOfExpr (RepBy e1 e2 e3) = 1 + sizeOfExpr e1 + sizeOfExpr e2 + sizeOfExpr e3
 sizeOfExpr (Cond e1 e2 e3) = 1 + sizeOfExpr e1 + sizeOfExpr e2 + sizeOfExpr e3
 sizeOfExpr (NewStore e) = 1 + sizeOfExpr e
 sizeOfExpr (Dereference _) = 1
-
--- Function to recursively handle and pattern match on Stmt
-processStmt :: Stmt -> IO ()
-processStmt statement = case statement of
-  Skip -> putStrLn "The statement is: Skip"
-  Assert expr -> putStrLn $ "The statement is an Assert with condition: " ++ show expr
-  Assume expr -> putStrLn $ "The statement is an Assume with condition: " ++ show expr
-  Assign var expr -> putStrLn $ "The statement is an Assign: " ++ var ++ " := " ++ show expr
-  AAssign var idx expr -> putStrLn $ "The statement is an Array Assign: " ++ var ++ "[" ++ show idx ++ "] := " ++ show expr
-  Seq s1 s2 -> do
-    putStrLn "The statement is a Sequence of two statements:"
-    processStmt s1
-    processStmt s2
-  IfThenElse guard s1 s2 -> do
-    putStrLn $ "The statement is an IfThenElse with guard: " ++ show guard
-    putStrLn "Then branch:"
-    processStmt s1
-    putStrLn "Else branch:"
-    processStmt s2
-  While guard body -> do
-    putStrLn $ "The statement is a While loop with guard: " ++ show guard
-    putStrLn "Body:"
-    processStmt body
-  Block vars body -> do
-    putStrLn $ "The statement is a Block with variables: " ++ show vars
-    processStmt body
-  TryCatch e s1 s2 -> do
-    putStrLn $ "The statement is a Try-Catch block with exception: " ++ e
-    putStrLn "Try block:"
-    processStmt s1
-    putStrLn "Catch block:"
-    processStmt s2
-  _ -> putStrLn "Other statement type"
-
--- Example for how we can run z3
-runZ3 :: IO ()
-runZ3 = evalZ3 $ do
-  -- Create variables x, y, z
-  x <- mkFreshIntVar "x"
-  y <- mkFreshIntVar "y"
-  z <- mkFreshIntVar "z"
-
-  -- Apply the function to x, y, z
-  minFunction x y z
-
-  -- Check satisfiability
-  result <- check
-  liftIO $ putStrLn $ "Satisfiable: " ++ show result
-
-  -- Get model if satisfiable
-  case result of
-    Sat -> do
-      mbModel <- getModel -- getModel returns Maybe Model
-      case mbModel of
-        (_, Just model) -> do
-          modelStr <- modelToString model -- Convert model to string
-          liftIO $ putStrLn "Model:"
-          liftIO $ putStrLn modelStr
-        (_, Nothing) -> liftIO $ putStrLn "No model found"
-    _ -> return ()
-
--- min(x, y | z) in z3
-minFunction :: (MonadZ3 m) => AST -> AST -> AST -> m ()
-minFunction x y z = do
-  -- z := x ;
-  assign <- mkEq z x
-
-  -- if y < x then { z := y } else { skip } ;
-  cond <- mkLt y x
-  thenCase <- mkEq z y
-  elseCase <- mkTrue
-
-  -- Combine conditions
-  ifThenElse <- mkIte cond thenCase elseCase
-
-  -- assert ((z = x) || (z = y)) && (z <= x) && (z <= y)
-  zEqualX <- mkEq z x
-  zEqualY <- mkEq z y
-  orCondition <- mkOr [zEqualX, zEqualY] -- mkOr returns m AST
-  leX <- mkLe z x
-  leY <- mkLe z y
-  combinedAssert <- mkAnd [orCondition, leX, leY] -- mkAnd returns m AST
-
-  -- Assert the combined condition
-  finalAssertion <- mkAnd [assign, ifThenElse, combinedAssert]
-  assert finalAssertion

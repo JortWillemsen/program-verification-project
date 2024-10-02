@@ -9,7 +9,7 @@ import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 type PostCondition = Expr
 
 processAST :: Program -> PostCondition
-processAST p = wlp (stmt p) (LitB True)
+processAST p = wlp (stmt p) (LitB False)
 
 type Value = Expr
 
@@ -44,8 +44,12 @@ wlp (IfThenElse e s1 s2) pc =
     (BinopExpr Implication e (wlp s1 pc))
     (BinopExpr Implication (OpNeg e) (wlp s2 pc))
 wlp s@(While {}) pc = reduceLoop s pc
-wlp (Block decls s) pc = undefined
-wlp (TryCatch str s1 s2) pc = undefined
+wlp (Block decls s) pc = wlp s pc -- must we append the vars here?
+wlp (TryCatch e s1 s2) pc =
+  BinopExpr
+    Or
+    (wlp s1 pc) -- No exception
+    (wlp (replaceAssignStmt s2 e (Var e)) pc) -- We do have an exception
 
 -- | postcondition: Current post condition
 -- | string: variable name
@@ -65,6 +69,27 @@ replaceAssign (RepBy e1 e2 e3) str e = RepBy (replaceAssign e1 str e) (replaceAs
 replaceAssign (Cond e1 e2 e3) str e = Cond (replaceAssign e1 str e) (replaceAssign e2 str e) (replaceAssign e3 str e)
 replaceAssign (NewStore e1) str e = NewStore (replaceAssign e1 str e)
 replaceAssign other _ _ = other
+
+replaceAssignStmt :: Stmt -> String -> Expr -> Stmt
+replaceAssignStmt Skip _ _ = Skip
+replaceAssignStmt (Assert e) str expr = Assert (replaceAssign e str expr)
+replaceAssignStmt (Assume e) str expr = Assume (replaceAssign e str expr)
+replaceAssignStmt (Assign var e) str expr =
+  Assign var (replaceAssign e str expr)
+replaceAssignStmt (AAssign arrName indexExpr valueExpr) str expr =
+  AAssign arrName (replaceAssign indexExpr str expr) (replaceAssign valueExpr str expr)
+replaceAssignStmt (DrefAssign var e) str expr =
+  DrefAssign var (replaceAssign e str expr)
+replaceAssignStmt (Seq s1 s2) str expr =
+  Seq (replaceAssignStmt s1 str expr) (replaceAssignStmt s2 str expr)
+replaceAssignStmt (IfThenElse cond s1 s2) str expr =
+  IfThenElse (replaceAssign cond str expr) (replaceAssignStmt s1 str expr) (replaceAssignStmt s2 str expr)
+replaceAssignStmt (While cond body) str expr =
+  While (replaceAssign cond str expr) (replaceAssignStmt body str expr)
+replaceAssignStmt (Block decls body) str expr =
+  Block decls (replaceAssignStmt body str expr)
+replaceAssignStmt (TryCatch e s1 s2) str expr =
+  TryCatch e (replaceAssignStmt s1 str expr) (replaceAssignStmt s2 str expr)
 
 -- reduceLoop :: Stmt -> PostCondition -> PostCondition
 -- reduceLoop (While s1 e) pc = undefined
