@@ -19,9 +19,9 @@ run = do
     Left err -> do
       putStrLn "Failed to parse the GCL file:"
       putStrLn err
-    Right gcl -> do
+    Right program -> do
       -- let z3 = exprToZ3 $ stmt gcl
-      let processedWlp = wlp (stmt gcl) (LitB True)
+      let processedWlp = wlp (stmt program) (LitB True)
       evalZ3 $ do
         env1 <- createEnv processedWlp M.empty
         z3Expr <- exprToZ3 processedWlp env1
