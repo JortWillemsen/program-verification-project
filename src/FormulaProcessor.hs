@@ -10,6 +10,9 @@ type PostCondition = Expr
 processAST :: Program -> PostCondition
 processAST p = wlp (stmt p) (LitB False)
 
+negateExpr :: Expr -> Expr
+negateExpr e = OpNeg e
+
 wlp :: Stmt -> PostCondition -> PostCondition
 wlp Skip pc = pc
 wlp (Assert e) pc = BinopExpr And e pc

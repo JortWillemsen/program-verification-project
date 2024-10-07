@@ -61,7 +61,7 @@ exprToZ3 (ArrayElem e1 i) env = do
   mkSelect z3Arr z3Index
 exprToZ3 (OpNeg e) env = do
   z3Expr <- exprToZ3 e env
-  mkUnaryMinus z3Expr
+  mkNot z3Expr 
 exprToZ3 (Exists str e) env = do
   qVar <- mkFreshIntVar str
   pat <- mkPattern [qVar]
