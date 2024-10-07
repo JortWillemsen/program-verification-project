@@ -2,8 +2,14 @@ module PreProcessor where
 
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 
-run :: Program -> Program
-run program = program {stmt = normalizeStmt (stmt program)}
+preprocess :: Program -> Bool -> Bool -> Bool -> Bool -> Program
+preprocess program loopUnfolding fold removeUnreach normalize =
+  let stmt' = stmt program
+      stmt'' = if loopUnfolding then unfoldWhile 1 stmt' else stmt'
+      stmt''' = if fold then foldConstantsInStmt stmt'' else stmt''
+      stmt'''' = if removeUnreach then removeUnreachable stmt''' else stmt'''
+      stmt''''' = if normalize then normalizeStmt stmt'''' else stmt''''
+   in program {stmt = stmt'''''}
 
 -- Normalize expressions within the program
 normalizeExpr :: Expr -> Expr
@@ -44,3 +50,14 @@ removeUnreachable (Seq s1 s2) = case removeUnreachable s1 of
   Skip -> Skip -- Skip the rest of the sequence if s1 is unreachable
   _ -> Seq s1 (removeUnreachable s2)
 removeUnreachable s = s
+
+-- Function to unfold while loops a fixed number of times
+unfoldWhile :: Int -> Stmt -> Stmt
+unfoldWhile 0 (While _ _) = Skip -- Stop unfolding after the limit
+unfoldWhile n (While guard body) =
+  IfThenElse
+    guard
+    (Seq body (unfoldWhile (n - 1) (While guard body))) -- unfold one iteration
+    Skip -- If the guard is false, exit the loop
+unfoldWhile n (Seq s1 s2) = Seq (unfoldWhile n s1) (unfoldWhile n s2) -- Recurse through sequences
+unfoldWhile _ s = s -- For all other statements, do nothing

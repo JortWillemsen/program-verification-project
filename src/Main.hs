@@ -2,9 +2,10 @@ module Main where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import qualified Data.Map as M
-import FormulaProcessor (wlp, negateExpr)
+import FormulaProcessor (negateExpr, wlp)
 import GCLParser.GCLDatatype (Expr (..), Program (..))
 import GCLParser.Parser (parseGCLfile)
+import PreProcessor (preprocess)
 import Z3.Monad
   ( Result (..),
     assert,
@@ -21,7 +22,7 @@ main = run
 
 run :: IO ()
 run = do
-  result <- parseGCLfile "examples/small_example.gcl"
+  result <- parseGCLfile "examples/E.gcl"
 
   case result of
     Left err -> do
@@ -29,7 +30,8 @@ run = do
       putStrLn err
     Right program -> do
       -- let z3 = exprToZ3 $ stmt gcl
-      let processedWlp = wlp (stmt program) (LitB True)
+      let preprocessedProgram = preprocess program True True True True
+      let processedWlp = wlp (stmt preprocessedProgram) (LitB True)
       evalZ3 $ do
         env1 <- createEnv processedWlp M.empty
         z3Expr <- exprToZ3 (negateExpr processedWlp) env1
@@ -52,5 +54,5 @@ run = do
                 liftIO $ putStrLn modelStr
               (_, Nothing) -> liftIO $ putStrLn "No model found"
           Unsat -> do
-            liftIO $ putStrLn "Negation of the expression is unsatisfyable, thus valid"
+            liftIO $ putStrLn "Negation of the expression is unsatisfiable, thus valid"
           _ -> return ()

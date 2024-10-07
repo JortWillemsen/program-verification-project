@@ -11,7 +11,7 @@ processAST :: Program -> PostCondition
 processAST p = wlp (stmt p) (LitB False)
 
 negateExpr :: Expr -> Expr
-negateExpr e = OpNeg e
+negateExpr = OpNeg
 
 wlp :: Stmt -> PostCondition -> PostCondition
 wlp Skip pc = pc
@@ -24,8 +24,8 @@ wlp (Seq s1 s2) pc = wlp s1 (wlp s2 pc)
 wlp (IfThenElse e s1 s2) pc =
   BinopExpr
     Or
-    (BinopExpr Implication e (wlp s1 pc))
-    (BinopExpr Implication (OpNeg e) (wlp s2 pc))
+    (BinopExpr And e (wlp s1 pc))
+    (BinopExpr And (OpNeg e) (wlp s2 pc))
 wlp s@(While {}) pc = reduceLoop s pc
 wlp (Block decls s) pc = wlp s pc -- must we append the vars here?
 wlp (TryCatch e s1 s2) pc =
