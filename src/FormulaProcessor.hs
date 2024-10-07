@@ -3,32 +3,12 @@
 
 module FormulaProcessor where
 
-import Data.Map (Map)
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 
 type PostCondition = Expr
 
 processAST :: Program -> PostCondition
 processAST p = wlp (stmt p) (LitB False)
-
-type Value = Expr
-
-type Ident = String
-
-type Environment = Map Ident Value
-
--- data Stmt
---   = Skip
---   | Assert Expr
---   | Assume Expr
---   | Assign String Expr
---   | AAssign String Expr Expr
---   | DrefAssign String Expr
---   | Seq Stmt Stmt
---   | IfThenElse Expr Stmt Stmt
---   | While Expr Stmt
---   | Block [VarDeclaration] Stmt
---   | TryCatch String Stmt Stmt
 
 wlp :: Stmt -> PostCondition -> PostCondition
 wlp Skip pc = pc
@@ -102,13 +82,20 @@ reduceLoop (While e s1) pc =
    in -- The WLP includes the assumption that the loop will terminate.
       wlp (Seq s1 terminationAssumption) pc
 
+-- data Stmt
+--   = Skip
+--   | Assert Expr
+--   | Assume Expr
+--   | Assign String Expr
+--   | AAssign String Expr Expr
+--   | DrefAssign String Expr
+--   | Seq Stmt Stmt
+--   | IfThenElse Expr Stmt Stmt
+--   | While Expr Stmt
+--   | Block [VarDeclaration] Stmt
+--   | TryCatch String Stmt Stmt
 --
---
---
---
---
---
---
+
 -- --
 -- transform :: Expr -> String -> Expr -- first function transforms a var to another var
 -- transform s v@(Var curStr)

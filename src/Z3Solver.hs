@@ -1,72 +1,10 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+module Z3Solver where
 
-module SecondExample where
-
-import Control.Monad.IO.Class
-import Control.Monad.State
 import qualified Data.Map as M
-import FormulaProcessor (wlp)
-import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
-import GCLParser.Parser (parseGCLfile)
+import GCLParser.GCLDatatype (BinOp (..), Expr (..))
 import Z3.Monad
 
-run :: IO ()
-run = do
-  result <- parseGCLfile "examples/second_test.gcl"
-
-  case result of
-    Left err -> do
-      putStrLn "Failed to parse the GCL file:"
-      putStrLn err
-    Right program -> do
-      -- let z3 = exprToZ3 $ stmt gcl
-      let processedWlp = wlp (stmt program) (LitB True)
-      evalZ3 $ do
-        env1 <- createEnv processedWlp M.empty
-        z3Expr <- exprToZ3 processedWlp env1
-
-        liftIO $ putStrLn $ "Z3 Expression: " ++ show z3Expr
-        -- Convert Z3 expression to a readable string
-        z3ExprStr <- astToString z3Expr
-        liftIO $ putStrLn $ "Z3 Expression: " ++ z3ExprStr
-
-        x <- mkFreshIntVar "x"
-
-        liftIO $ putStrLn $ show z3Expr
-
-        assert z3Expr
-
-        resultZ3 <- check
-
-        case resultZ3 of
-          Sat -> do
-            mbModel <- getModel -- getModel returns Maybe Model
-            case mbModel of
-              (_, Just model) -> do
-                modelStr <- modelToString model -- Convert model to string
-                liftIO $ putStrLn "Model:"
-                liftIO $ putStrLn modelStr
-              (_, Nothing) -> liftIO $ putStrLn "No model found"
-          _ -> return ()
-
--- data Stmt
---   = Skip
---   | Assert Expr
---   | Assume Expr
---   | Assign String Expr
---   | AAssign String Expr Expr
---   | DrefAssign String Expr
---   | Seq Stmt Stmt
---   | IfThenElse Expr Stmt Stmt
---   | While Expr Stmt
---   | Block [VarDeclaration] Stmt
---   | TryCatch String Stmt Stmt
---   | Call       [String]         [Expr] String
-
 type Env = M.Map String AST
-
--- Klopt ForAll wel?
 
 createEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
 createEnv LitNull cEnv = return cEnv
@@ -107,9 +45,6 @@ createEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as 
 createEnv (LitI _) cEnv = return cEnv
 createEnv (LitB _) cEnv = return cEnv
 
--- var <-
--- M.insert str
-
 exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
 exprToZ3 LitNull env = undefined -- optional
 exprToZ3 (Forall str e) env = case M.lookup str env of
@@ -148,7 +83,6 @@ exprToZ3 (Dereference str) env = undefined -- optional
 exprToZ3 (LitI i) env = mkInteger (toInteger i)
 exprToZ3 (LitB True) env = mkTrue
 exprToZ3 (LitB False) env = mkFalse
--- exprToZ3 (Var n) = mkFreshIntVar n -- All vars are integers right?
 exprToZ3 (Var n) env = do
   case M.lookup n env of
     Just z3Var -> return z3Var -- Return existing Z3 variable if found
