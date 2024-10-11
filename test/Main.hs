@@ -10,7 +10,14 @@ main = defaultMain tests
 -- Array of tuples that contain the programs and whether they are valid or not
 testCases :: [(String, Bool)]
 testCases =
-  [ ("examples/E.gcl", False)
+  [ ("examples/E.gcl", False),
+    -- ("examples/min.gcl", True),
+    -- ("examples/minind.gcl", True),
+    -- ("examples/reftest.gcl", True)
+    -- ("examples/reverse.gcl", True),
+    ("examples/S1.gcl", True)
+    -- ("examples/swap.gcl", True),
+    -- ("examples/test.gcl", True)
   ]
 
 -- Define the test suite

@@ -8,7 +8,7 @@ import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 type PostCondition = Expr
 
 processAST :: Program -> PostCondition
-processAST p = wlp (stmt p) (LitB False)
+processAST p = wlp (stmt p) (LitB True)
 
 negateExpr :: Expr -> Expr
 negateExpr = OpNeg

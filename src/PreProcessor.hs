@@ -2,10 +2,10 @@ module PreProcessor where
 
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 
-preprocess :: Program -> Bool -> Bool -> Bool -> Bool -> Program
-preprocess program loopUnfolding fold removeUnreach normalize =
+preprocess :: Program -> Int -> Bool -> Bool -> Bool -> Program
+preprocess program loopUnfoldingAmount fold removeUnreach normalize =
   let stmt' = stmt program
-      stmt'' = if loopUnfolding then unfoldWhile 1 stmt' else stmt'
+      stmt'' = unfoldWhile loopUnfoldingAmount stmt'
       stmt''' = if fold then foldConstantsInStmt stmt'' else stmt''
       stmt'''' = if removeUnreach then removeUnreachable stmt''' else stmt'''
       stmt''''' = if normalize then normalizeStmt stmt'''' else stmt''''
