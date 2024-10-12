@@ -10,7 +10,7 @@ import GCLParser.Parser
 import PreProcessor
 import Z3.Base
 import Z3.Monad
-import Z3Solver (createEnv, exprToZ3)
+import Z3Solver (buildEnv, exprToZ3)
 
 -- | Runs the entire verification process on a given GCL file.
 -- Takes a file path as input and returns 'True' if the program is valid,
@@ -40,7 +40,7 @@ run file = do
       -- Step 4: Run the Z3 solver
       evalZ3 $ do
         -- Create the environment for Z3 with the WLP expression
-        env1 <- createEnv processedWlp M.empty
+        env1 <- buildEnv (input program) processedWlp M.empty
 
         -- Negate the WLP expression and convert it to a Z3 expression
         z3Expr <- exprToZ3 (negateExpr processedWlp) env1

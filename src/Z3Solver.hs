@@ -1,11 +1,53 @@
 module Z3Solver where
 
 import qualified Data.Map as M
-import GCLParser.GCLDatatype (BinOp (..), Expr (..))
+import GCLParser.GCLDatatype (PrimitiveType (..), Type (..), BinOp (..), Expr (..), VarDeclaration (VarDeclaration))
 import Z3.Monad
+import Debug.Trace (trace)
 
 type Env = M.Map String AST
 
+buildEnv :: (MonadZ3 z3) => [VarDeclaration] -> Expr -> Env -> z3 Env
+buildEnv [] e env = createEnv e env -- If no declarations, just return the result of createEnv
+buildEnv (decl:decls) e env = do
+  -- Add the first declaration to the environment
+  env1 <- addDeclToEnv decl env
+  -- Create environment from the expression
+  env2 <- createEnv e env1
+  -- Process the rest of the declarations recursively
+  buildEnv decls e env2
+
+-- Add a single variable declaration to the environment
+addDeclToEnv :: (MonadZ3 z3) => VarDeclaration -> Env -> z3 Env
+addDeclToEnv (VarDeclaration str typ) env = case typ of
+  PType prim -> case prim of
+    -- Create an integer variable
+    PTInt -> do
+      freshInt <- mkFreshIntVar str
+      return $ M.insert str freshInt env
+    -- Create a boolean variable
+    PTBool -> do
+      freshBool <- mkFreshBoolVar str
+      return $ M.insert str freshBool env
+  -- Handle reference types here if needed
+  RefType -> undefined
+  -- Handle array types
+  AType prim -> case prim of
+    -- Create an integer array
+    PTInt -> do
+      intSort <- mkIntSort
+      arraySort <- mkArraySort intSort intSort
+      freshArray <- mkFreshConst str arraySort
+      return $ M.insert str freshArray env
+    -- Create a boolean array
+    PTBool -> do
+      intSort <- mkIntSort
+      boolSort <- mkBoolSort
+      arraySort <- mkArraySort intSort boolSort
+      freshArray <- mkFreshConst str arraySort
+      return $ M.insert str freshArray env
+
+-- Build the environment from the given expression
 createEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
 createEnv LitNull cEnv = return cEnv
 createEnv (Forall str e) cEnv = case M.lookup str cEnv of
@@ -49,24 +91,23 @@ exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
 exprToZ3 LitNull env = undefined -- optional
 exprToZ3 (Forall str e) env = case M.lookup str env of
   Just z3var -> do
-    pat <- mkPattern [z3var]
     z3Expr <- exprToZ3 e env
-    mkForallConst [pat] [] z3Expr
-  Nothing -> do
-    error "dit hoort niet te gebeuren"
+    app <- toApp z3var
+    mkForallConst [] [app] z3Expr   -- Use the App for bound variable
+  Nothing -> error "dit hoort niet te gebeuren"
 exprToZ3 (Parens e) env = exprToZ3 e env
 exprToZ3 (ArrayElem e1 i) env = do
-  z3Arr <- exprToZ3 e1 env
   z3Index <- exprToZ3 i env
+  z3Arr <- exprToZ3 e1 env
   mkSelect z3Arr z3Index
 exprToZ3 (OpNeg e) env = do
   z3Expr <- exprToZ3 e env
   mkNot z3Expr 
 exprToZ3 (Exists str e) env = do
   qVar <- mkFreshIntVar str
-  pat <- mkPattern [qVar]
+  app <- toApp qVar
   z3Expr <- exprToZ3 e env
-  mkExistsConst [pat] [] z3Expr
+  mkExistsConst [] [app] z3Expr
 exprToZ3 (SizeOf e) env = mkIntNum $ sizeOfExpr e
 exprToZ3 (RepBy arr i v) env = do
   arrZ3 <- exprToZ3 arr env
