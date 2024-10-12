@@ -12,59 +12,48 @@ import Z3.Base
 import Z3.Monad
 import Z3Solver (createEnv, exprToZ3)
 
--- Function to run the entire verification process
+-- | Runs the entire verification process on a given GCL file.
+-- Takes a file path as input and returns 'True' if the program is valid,
+-- or 'False' if it is not valid or if parsing fails.
 run :: String -> IO Bool
 run file = do
-  -- eitherWlp <- parseAndProcessGCL file
+  -- Step 1: Parse the GCL file
   result <- parseGCLfile file
 
   case result of
+    -- If parsing fails, print the error and return False
     Left err -> do
       putStrLn "Failed to parse the GCL file:"
       putStrLn err
-      return False -- Return False if parsing fails
+      return False
+
+    -- If parsing succeeds, proceed with the verification
     Right program -> do
-      -- Preprocess the program once and store the result
+      -- Step 2: Preprocess the parsed program
+      -- Preprocess the program with a maximum recursion depth of 10 and flags enabled
       let preprocessedProgram = preprocess program 10 True True True
-      -- Compute the WLP expression for benchmarking
+
+      -- Step 3: Compute the WLP (Weakest Liberal Precondition) expression
+      -- Here, 'LitB True' represents the postcondition we are verifying against
       let processedWlp = wlp (stmt preprocessedProgram) (LitB True)
+
+      -- Step 4: Run the Z3 solver
       evalZ3 $ do
+        -- Create the environment for Z3 with the WLP expression
         env1 <- createEnv processedWlp M.empty
+
+        -- Negate the WLP expression and convert it to a Z3 expression
         z3Expr <- exprToZ3 (negateExpr processedWlp) env1
+
+        -- Assert the Z3 expression and check the satisfiability
         assert z3Expr
         resultZ3 <- check
+
+        -- Step 5: Handle the result from the Z3 solver
         case resultZ3 of
-          Sat -> do
-            return False -- Return False if the program is not valid
-          Unsat -> do
-            return True -- Return True if the program is valid
-          _ -> return False -- Handle any other cases
-
---   case result of
---     Left _ -> return False
---     Right wlp ->
---       evalZ3 $ do
---         liftIO $ print $ OpNeg wlp
-
---         env1 <- createEnv wlp M.empty
-
---         -- Set up the Z3 environment and get the Z3 expression
---         z3Expr <- exprToZ3 (negateExpr wlp) env1
-
---         -- Perform the check, which can be benchmarked separately
---         resultZ3 <- check
---         -- Handle the result
---         return $ case resultZ3 of
---           Sat -> False -- Program is not valid
---           Unsat -> True -- Program is valid
---           _ -> False -- Handle other cases
-
--- -- Function to parse and preprocess a GCL file
--- parseAndProcessGCL :: String -> IO (Either String Expr)
--- parseAndProcessGCL file =
---   parseGCLfile file >>= \case
---     Left err -> return $ Left err
---     Right program ->
---       let preprocessedProgram = preprocess program 10 True True True
---           processedWlp = wlp (stmt preprocessedProgram) (LitB True)
---        in return $ Right processedWlp
+          -- If satisfiable, the program is invalid (counterexample exists)
+          Sat -> return False
+          -- If unsatisfiable, the program is valid (no counterexample exists)
+          Unsat -> return True
+          -- In any other case, return False as a fallback
+          _ -> return False
