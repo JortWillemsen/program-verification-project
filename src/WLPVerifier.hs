@@ -1,15 +1,13 @@
-{-# LANGUAGE LambdaCase #-}
-
 module WLPVerifier where
 
 import Control.Monad.Cont (MonadIO (liftIO))
 import qualified Data.Map as M
 import FormulaProcessor (PostCondition, negateExpr, processAST, wlp)
-import GCLParser.GCLDatatype
-import GCLParser.Parser
-import PreProcessor
-import Z3.Base
-import Z3.Monad
+import GCLParser.GCLDatatype (Expr (..), Program (input, stmt))
+import GCLParser.Parser (parseGCLfile)
+import PreProcessor (preprocess)
+import Z3.Base (Result (Sat, Unsat))
+import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
 import Z3Solver (buildEnv, exprToZ3)
 
 -- | Runs the entire verification process on a given GCL file.

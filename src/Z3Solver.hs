@@ -1,15 +1,47 @@
 module Z3Solver where
 
 import qualified Data.Map as M
-import GCLParser.GCLDatatype (PrimitiveType (..), Type (..), BinOp (..), Expr (..), VarDeclaration (VarDeclaration))
-import Z3.Monad
 import Debug.Trace (trace)
+import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Type (..), VarDeclaration (VarDeclaration))
+import Z3.Monad
+  ( AST,
+    MonadZ3,
+    mkAdd,
+    mkAnd,
+    mkArraySort,
+    mkBoolSort,
+    mkDiv,
+    mkEq,
+    mkExistsConst,
+    mkFalse,
+    mkForallConst,
+    mkFreshBoolVar,
+    mkFreshConst,
+    mkFreshIntVar,
+    mkGe,
+    mkGt,
+    mkImplies,
+    mkIntNum,
+    mkIntSort,
+    mkInteger,
+    mkIte,
+    mkLe,
+    mkLt,
+    mkMul,
+    mkNot,
+    mkOr,
+    mkSelect,
+    mkStore,
+    mkSub,
+    mkTrue,
+    toApp,
+  )
 
 type Env = M.Map String AST
 
 buildEnv :: (MonadZ3 z3) => [VarDeclaration] -> Expr -> Env -> z3 Env
 buildEnv [] e env = createEnv e env -- If no declarations, just return the result of createEnv
-buildEnv (decl:decls) e env = do
+buildEnv (decl : decls) e env = do
   -- Add the first declaration to the environment
   env1 <- addDeclToEnv decl env
   -- Create environment from the expression
@@ -93,7 +125,7 @@ exprToZ3 (Forall str e) env = case M.lookup str env of
   Just z3var -> do
     z3Expr <- exprToZ3 e env
     app <- toApp z3var
-    mkForallConst [] [app] z3Expr   -- Use the App for bound variable
+    mkForallConst [] [app] z3Expr -- Use the App for bound variable
   Nothing -> error "dit hoort niet te gebeuren"
 exprToZ3 (Parens e) env = exprToZ3 e env
 exprToZ3 (ArrayElem e1 i) env = do
@@ -102,7 +134,7 @@ exprToZ3 (ArrayElem e1 i) env = do
   mkSelect z3Arr z3Index
 exprToZ3 (OpNeg e) env = do
   z3Expr <- exprToZ3 e env
-  mkNot z3Expr 
+  mkNot z3Expr
 exprToZ3 (Exists str e) env = do
   qVar <- mkFreshIntVar str
   app <- toApp qVar

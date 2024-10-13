@@ -3,8 +3,6 @@ module Main where
 import Control.Monad.IO.Class (liftIO)
 import Criterion.Main
 import Criterion.Types (Config (..), Verbosity (..))
--- import WLPVerifier (parseAndProcessGCL, setupZ3Env)
-
 import qualified Data.Map as M
 import FormulaProcessor (negateExpr, processAST, wlp)
 import GCLParser.GCLDatatype
