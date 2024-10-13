@@ -11,13 +11,26 @@ main = defaultMain tests
 testCases :: [(String, Bool)]
 testCases =
   [ ("examples/E.gcl", False),
-    -- ("examples/min.gcl", True),
-    -- ("examples/minind.gcl", True),
+    ("examples/min.gcl", True),
+    ("examples/minind.gcl", True),
     -- ("examples/reftest.gcl", True)
-    -- ("examples/reverse.gcl", True),
-    ("examples/S1.gcl", True)
-    -- ("examples/swap.gcl", True),
-    -- ("examples/test.gcl", True)
+    ("examples/reverse.gcl", True),
+    ("examples/S1.gcl", True),
+    ("examples/swap.gcl", True),
+    ("examples/test.gcl", True),
+    -- Benchmarks
+    ("examples/benchmark/bsort.gcl", True),
+    ("examples/benchmark/divByN.gcl", True),
+    ("examples/benchmark/find12.gcl", True),
+    ("examples/benchmark/invalidBSort.gcl", False),
+    ("examples/benchmark/invalidDivByN.gcl", False),
+    ("examples/benchmark/invalidFind12.gcl", False),
+    ("examples/benchmark/invalidMemberOf.gcl", False),
+    ("examples/benchmark/invalidMin.gcl", False),
+    ("examples/benchmark/invalidPullUp.gcl", False),
+    ("examples/benchmark/memberOf.gcl", True),
+    ("examples/benchmark/min.gcl", True),
+    ("examples/benchmark/pullUp.gcl", True)
   ]
 
 -- Define the test suite

@@ -4,7 +4,7 @@ module WLPVerifier where
 
 import Control.Monad.Cont (MonadIO (liftIO))
 import qualified Data.Map as M
-import FormulaProcessor (negateExpr, processAST, wlp)
+import FormulaProcessor (PostCondition, negateExpr, processAST, wlp)
 import GCLParser.GCLDatatype
 import GCLParser.Parser
 import PreProcessor
