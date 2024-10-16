@@ -3,12 +3,12 @@ module WLPVerifier where
 import Control.Monad.Cont (MonadIO (liftIO))
 import qualified Data.Map as M
 import FormulaProcessor (PostCondition, negateExpr, processAST, wlp)
-import GCLParser.GCLDatatype (Expr (..), Program (input, stmt))
+import GCLParser.GCLDatatype (Expr (..), Program (input, output, stmt))
 import GCLParser.Parser (parseGCLfile)
-import PreProcessor (preprocess)
+import PreProcessor (makeUniqueForall, preprocess)
 import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
-import Z3Solver (buildEnv, exprToZ3)
+import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
 
 -- | Runs the entire verification process on a given GCL file.
 -- Takes a file path as input and returns 'True' if the program is valid,
@@ -27,21 +27,36 @@ run file = do
 
     -- If parsing succeeds, proceed with the verification
     Right program -> do
+      let uniqueProgram = makeUniqueForall program
+
       -- Step 2: Preprocess the parsed program
       -- Preprocess the program with a maximum recursion depth of 10 and flags enabled
-      let preprocessedProgram = preprocess program 10 True True True
+
+      -- print uniqueProgram
+
+      putStrLn ""
+
+      let preprocessedProgram = preprocess uniqueProgram 4 True True True
 
       -- Step 3: Compute the WLP (Weakest Liberal Precondition) expression
       -- Here, 'LitB True' represents the postcondition we are verifying against
       let processedWlp = wlp (stmt preprocessedProgram) (LitB True)
 
+      -- print processedWlp
+
+      putStrLn ""
+
       -- Step 4: Run the Z3 solver
       evalZ3 $ do
         -- Create the environment for Z3 with the WLP expression
-        env1 <- buildEnv (input program) processedWlp M.empty
+        env1 <- buildEnv (input uniqueProgram ++ output uniqueProgram ++ getVarDeclarations (stmt uniqueProgram)) (wlp (stmt uniqueProgram) (LitB True)) M.empty
+
+        -- liftIO $ print env1
 
         -- Negate the WLP expression and convert it to a Z3 expression
         z3Expr <- exprToZ3 (negateExpr processedWlp) env1
+
+        -- liftIO $ print z3Expr
 
         -- Assert the Z3 expression and check the satisfiability
         assert z3Expr

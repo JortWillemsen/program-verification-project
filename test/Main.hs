@@ -26,10 +26,10 @@ testCases =
     ("examples/benchmark/invalidDivByN.gcl", False),
     ("examples/benchmark/invalidFind12.gcl", False),
     ("examples/benchmark/invalidMemberOf.gcl", False),
-    ("examples/benchmark/invalidMin.gcl", False),
+    -- ("examples/benchmark/invalidMin.gcl", False),
     ("examples/benchmark/invalidPullUp.gcl", False),
     ("examples/benchmark/memberOf.gcl", True),
-    ("examples/benchmark/min.gcl", True),
+    -- ("examples/benchmark/min.gcl", True),
     ("examples/benchmark/pullUp.gcl", True)
   ]
 

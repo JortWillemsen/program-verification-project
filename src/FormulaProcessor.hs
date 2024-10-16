@@ -1,9 +1,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module FormulaProcessor where
 
-import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
+import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Program (..), Stmt (..), Type (..), VarDeclaration (..))
 
 type PostCondition = Expr
 
@@ -18,7 +17,7 @@ wlp Skip pc = pc
 wlp (Assert e) pc = BinopExpr And e pc
 wlp (Assume e) pc = BinopExpr Implication e pc
 wlp (Assign str e) pc = replaceAssign pc str e
-wlp (AAssign str e1 e2) pc = wlp (Assign str (RepBy (Var str) e1 e2)) pc -- optional
+wlp (AAssign str e1 e2) pc = wlp (Assign str (RepBy (Var str) e1 e2)) pc
 wlp (DrefAssign s e) pc = undefined -- optional
 wlp (Seq s1 s2) pc = wlp s1 (wlp s2 pc)
 wlp (IfThenElse e s1 s2) pc =
@@ -27,7 +26,7 @@ wlp (IfThenElse e s1 s2) pc =
     (BinopExpr And e (wlp s1 pc))
     (BinopExpr And (OpNeg e) (wlp s2 pc))
 wlp s@(While {}) pc = reduceLoop s pc
-wlp (Block decls s) pc = wlp s pc -- must we append the vars here?
+wlp (Block decls s) pc = wlp s pc -- must we append the vars here? I dont think so
 wlp (TryCatch e s1 s2) pc =
   BinopExpr
     Or

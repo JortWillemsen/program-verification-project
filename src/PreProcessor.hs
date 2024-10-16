@@ -1,5 +1,6 @@
 module PreProcessor where
 
+import qualified Data.Map as M
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 
 preprocess :: Program -> Int -> Bool -> Bool -> Bool -> Program
@@ -60,4 +61,64 @@ unfoldWhile n (While guard body) =
     (Seq body (unfoldWhile (n - 1) (While guard body))) -- unfold one iteration
     Skip -- If the guard is false, exit the loop
 unfoldWhile n (Seq s1 s2) = Seq (unfoldWhile n s1) (unfoldWhile n s2) -- Recurse through sequences
+unfoldWhile n (Block e s1) = Block e (unfoldWhile n s1)
 unfoldWhile _ s = s -- For all other statements, do nothing
+
+-- |
+-- | Below is to make sure that variables are unique
+-- |
+-- |
+-- |
+-- |
+-- |
+-- |
+
+-- Function to ensure unique variables for forall
+makeUniqueForall :: Program -> Program
+makeUniqueForall prog = prog {stmt = renameStmt (stmt prog) M.empty 0}
+
+-- Helper function to rename variables in statements
+renameStmt :: Stmt -> M.Map String String -> Int -> Stmt
+renameStmt Skip env count = Skip
+renameStmt (Assert e) env count = Assert (renameExpr e env count)
+renameStmt (Assume e) env count = Assume (renameExpr e env count)
+renameStmt (Assign var e) env count = Assign var (renameExpr e env count)
+renameStmt (DrefAssign var e) env count = DrefAssign var (renameExpr e env count)
+renameStmt (AAssign var i e) env count = AAssign var (renameExpr i env count) (renameExpr e env count)
+renameStmt (Seq s1 s2) env count = Seq (renameStmt s1 env count) (renameStmt s2 env (count + 100))
+renameStmt (IfThenElse g s1 s2) env count = IfThenElse (renameExpr g env count) (renameStmt s1 env count) (renameStmt s2 env count)
+renameStmt (While g s) env count = While (renameExpr g env count) (renameStmt s env count)
+renameStmt (Block vars s) env count = Block vars (renameStmt s env count)
+renameStmt (TryCatch e s1 s2) env count = TryCatch e (renameStmt s1 env count) (renameStmt s2 env count)
+
+-- Helper function to rename variables in expressions
+renameExpr :: Expr -> M.Map String String -> Int -> Expr
+renameExpr (Var var) env _ = Var (renameVar var env) -- Rename variable if in env
+renameExpr (LitI x) _ _ = LitI x
+renameExpr (LitB b) _ _ = LitB b
+renameExpr LitNull _ _ = LitNull
+renameExpr (Parens e) env count = Parens (renameExpr e env count)
+renameExpr (ArrayElem e1 e2) env count = ArrayElem (renameExpr e1 env count) (renameExpr e2 env count)
+renameExpr (OpNeg e) env count = OpNeg (renameExpr e env count)
+renameExpr (BinopExpr op e1 e2) env count = BinopExpr op (renameExpr e1 env count) (renameExpr e2 env count)
+renameExpr (Forall var p) env count =
+  let newVar = generateNewVar var count
+      newEnv = M.insert var newVar env
+   in Forall newVar (renameExpr p newEnv count) -- Rename var in p using newEnv
+renameExpr (Exists var p) env count =
+  let newVar = generateNewVar var count
+      newEnv = M.insert var newVar env
+   in Exists newVar (renameExpr p newEnv count) -- Rename var in p using newEnv
+renameExpr (SizeOf e) env count = SizeOf (renameExpr e env count)
+renameExpr (RepBy e1 e2 e3) env count = RepBy (renameExpr e1 env count) (renameExpr e2 env count) (renameExpr e3 env count)
+renameExpr (Cond g e1 e2) env count = Cond (renameExpr g env count) (renameExpr e1 env count) (renameExpr e2 env count)
+renameExpr (NewStore e) env count = NewStore (renameExpr e env count)
+renameExpr (Dereference var) env _ = Dereference (renameVar var env) -- Rename dereferenced var if in env
+
+-- Helper function to rename variables based on environment
+renameVar :: String -> M.Map String String -> String
+renameVar var = M.findWithDefault var var
+
+-- Helper function to generate new variable names for forall/exists
+generateNewVar :: String -> Int -> String
+generateNewVar var count = var ++ "_" ++ show count

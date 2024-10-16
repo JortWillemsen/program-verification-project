@@ -2,7 +2,7 @@ module Z3Solver where
 
 import qualified Data.Map as M
 import Debug.Trace (trace)
-import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Type (..), VarDeclaration (VarDeclaration))
+import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
 import Z3.Monad
   ( AST,
     MonadZ3,
@@ -14,6 +14,7 @@ import Z3.Monad
     mkEq,
     mkExistsConst,
     mkFalse,
+    mkForall,
     mkForallConst,
     mkFreshBoolVar,
     mkFreshConst,
@@ -32,6 +33,7 @@ import Z3.Monad
     mkOr,
     mkSelect,
     mkStore,
+    mkStringSymbol,
     mkSub,
     mkTrue,
     toApp,
@@ -67,15 +69,16 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
   AType prim -> case prim of
     -- Create an integer array
     PTInt -> do
-      intSort <- mkIntSort
-      arraySort <- mkArraySort intSort intSort
+      domain <- mkIntSort
+      range <- mkIntSort
+      arraySort <- mkArraySort domain range
       freshArray <- mkFreshConst str arraySort
       return $ M.insert str freshArray env
     -- Create a boolean array
     PTBool -> do
-      intSort <- mkIntSort
-      boolSort <- mkBoolSort
-      arraySort <- mkArraySort intSort boolSort
+      domain <- mkIntSort
+      range <- mkBoolSort
+      arraySort <- mkArraySort domain range
       freshArray <- mkFreshConst str arraySort
       return $ M.insert str freshArray env
 
@@ -119,13 +122,28 @@ createEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as 
 createEnv (LitI _) cEnv = return cEnv
 createEnv (LitB _) cEnv = return cEnv
 
+getVarDeclarations :: Stmt -> [VarDeclaration]
+getVarDeclarations Skip = []
+getVarDeclarations (Assert _) = []
+getVarDeclarations (Assume _) = []
+getVarDeclarations (Assign _ _) = []
+getVarDeclarations (DrefAssign _ _) = []
+getVarDeclarations (AAssign {}) = []
+getVarDeclarations (Seq s1 s2) = getVarDeclarations s1 ++ getVarDeclarations s2
+getVarDeclarations (IfThenElse _ s1 s2) = getVarDeclarations s1 ++ getVarDeclarations s2
+getVarDeclarations (While _ s) = getVarDeclarations s
+getVarDeclarations (Block vars s) = vars ++ getVarDeclarations s
+getVarDeclarations (TryCatch _ s1 s2) = getVarDeclarations s1 ++ getVarDeclarations s2
+
 exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
 exprToZ3 LitNull env = undefined -- optional
 exprToZ3 (Forall str e) env = case M.lookup str env of
   Just z3var -> do
     z3Expr <- exprToZ3 e env
-    app <- toApp z3var
-    mkForallConst [] [app] z3Expr -- Use the App for bound variable
+    intSort <- mkIntSort
+    symbol <- mkStringSymbol str
+    -- [Pattern] -> [Symbol] -> [Sort] -> AST -> z3 AST
+    mkForall [] [symbol] [intSort] z3Expr -- Use the App for bound variable
   Nothing -> error "dit hoort niet te gebeuren"
 exprToZ3 (Parens e) env = exprToZ3 e env
 exprToZ3 (ArrayElem e1 i) env = do
@@ -139,7 +157,7 @@ exprToZ3 (Exists str e) env = do
   qVar <- mkFreshIntVar str
   app <- toApp qVar
   z3Expr <- exprToZ3 e env
-  mkExistsConst [] [app] z3Expr
+  mkExistsConst [] [app] z3Expr -- Faulty
 exprToZ3 (SizeOf e) env = mkIntNum $ sizeOfExpr e
 exprToZ3 (RepBy arr i v) env = do
   arrZ3 <- exprToZ3 arr env
