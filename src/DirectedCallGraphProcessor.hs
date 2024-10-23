@@ -1,54 +1,80 @@
 module DirectedCallGraphProcessor where
 
-import GCLParser.GCLDatatype (Expr (LitB), Stmt (..))
+import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Program (..), Stmt (..), Type (..), VarDeclaration (..))
+
 import ProgramProcessor
 import Types (PostCondition)
 import DCG
+import Helper (replaceAssignStmt)
+import Z3Solver (Env, exprToZ3, buildEnv, getVarDeclarations)
+import Z3.Monad (check, Result (Unsat, Sat), evalZ3, assert, paramsToString)
 
--- Function to create a DCG from a Stmt, skipping Skip nodes and allowing all
--- other statements to have possible children
--- Function to create a DCG from a Stmt, skipping Skip nodes and allowing all
--- other statements to have possible children
-programDCG :: Stmt -> DCG Stmt
-programDCG Skip = Empty
-programDCG (Assign var expr) = Node Empty (Assign var expr) Empty
-programDCG (Assert expr) = Node Empty (Assert expr) Empty
-programDCG (Assume expr) = Node Empty (Assume expr) Empty
-programDCG (AAssign arr idx val) = Node Empty (AAssign arr idx val) Empty
-programDCG (DrefAssign var expr) = Node Empty (DrefAssign var expr) Empty
 
-programDCG (Seq s1 s2) =
-  let rightDCG = programDCG s2
-  in case rightDCG of
-    Empty -> programDCG s1
-    _     -> Node (programDCG s1) (Seq s1 s2) rightDCG
+programDCG :: [Stmt] -> DCG Stmt
+programDCG l = programDCG' $ reverse l
 
-programDCG (IfThenElse cond s1 s2) =
-  Node (programDCG s1) (IfThenElse cond s1 s2) (programDCG s2)
+programDCG' :: [Stmt] -> DCG Stmt
+programDCG' [] = Empty
+programDCG' [x] = Leaf x  -- Base case: single element becomes the root
+programDCG' (x:xs) =
+  case x of
+    IfThenElse cond thenStmt elseStmt ->
+      -- Two children: one for 'then' and one for 'else' branches
+      Node (programDCG' (reverse [thenStmt] ++ xs)) x (programDCG' (reverse [elseStmt] ++ xs))
+    TryCatch _ tryStmt catchStmt ->
+      -- Two children: one for 'try' and one for 'catch' blocks
+      Node (programDCG' (reverse [tryStmt] ++ xs)) x (programDCG' (reverse [catchStmt] ++ xs))
+    _ ->
+      -- Chain the current node to the rest of the list
+      Node (programDCG' xs) x Empty
 
-programDCG (While cond body) = 
-  Node (programDCG body) (While cond body) Empty
-
-programDCG (Block _ stmt) = programDCG stmt
-
-programDCG (TryCatch _ tryBlock catchBlock) =
-  Node (programDCG tryBlock) (TryCatch "" tryBlock catchBlock) (programDCG catchBlock)
-
--- Helper function to reverse the DCG tree by swapping left and right subtrees
-reverseDCG :: DCG a -> DCG a
-reverseDCG Empty = Empty
-reverseDCG (Node left stmt right) =
-  Node (reverseDCG right) stmt (reverseDCG left)  -- Swap the left and right subtrees
-
--- Function to first generate the DCG, then reverse it
-reversedProgramDCG :: Stmt -> DCG Stmt
-reversedProgramDCG stmt = reverseDCG (programDCG stmt)
+flattenProgram :: Stmt -> [Stmt]
+flattenProgram Skip = []
+flattenProgram stmt@(Assert _) = [stmt]
+flattenProgram stmt@(Assume _) = [stmt]
+flattenProgram stmt@(Assign _ _) = [stmt]
+flattenProgram stmt@(AAssign _ _ _) = [stmt]
+flattenProgram stmt@(DrefAssign _ _) = [stmt]
+flattenProgram (Seq s1 s2) = flattenProgram s1 ++ flattenProgram s2
+flattenProgram stmt@(IfThenElse _ _ _) = [stmt] -- Leave IfThenElse unchanged
+flattenProgram stmt@(While _ _) = [stmt] -- Leave While unchanged
+flattenProgram stmt@(Block _ _) = [stmt] -- Leave Block unchanged
+flattenProgram stmt@(TryCatch _ _ _) = [stmt] -- Leave TryCatch unchanged
 
 wlpDCG :: DCG Stmt -> DCG PostCondition
 wlpDCG dcg = wlpDCG' (dcg, LitB True)
   where
     wlpDCG' :: (DCG Stmt, PostCondition) -> DCG PostCondition
     wlpDCG' (Empty, _) = Empty
+    wlpDCG' (Leaf x, pc) = Leaf (wlp x pc)
+    wlpDCG' (Node l (IfThenElse e _ _) r, pc) = Node (wlpDCG' (l, pcLeft)) pc (wlpDCG' (r, pcRight))
+        where
+          pcLeft  = BinopExpr And e pc
+          pcRight = BinopExpr And (OpNeg e) pc
+    wlpDCG' (Node l (TryCatch e s1 s2) r, pc) = Node (wlpDCG' (l, pc)) pc (wlpDCG' (r, pcError))
+      where
+        pcError = wlp (replaceAssignStmt s2 e (Var e)) pc
     wlpDCG' (Node l x r, pc) = Node (wlpDCG' (l, pc')) pc' (wlpDCG' (r, pc'))
       where
         pc' = wlp x pc
+
+solveZ3DCG :: DCG PostCondition -> Program -> Env -> IO Bool
+solveZ3DCG Empty _ env = return True
+solveZ3DCG (Node l x r) p env = do
+  l <- solveZ3DCG l p env 
+  r <- solveZ3DCG r p env
+
+  return $ l && r
+  
+solveZ3DCG (Leaf x) p env =
+  evalZ3 $ do
+    z3Expr <- exprToZ3 (negateExpr x) env
+    env1 <- buildEnv (input p ++ output p ++ getVarDeclarations (stmt p)) (wlp (stmt p) (LitB True)) env
+
+    assert z3Expr
+    result <- check
+
+    case result of
+      Sat -> return False
+      Unsat -> return True
+      _ -> return False
