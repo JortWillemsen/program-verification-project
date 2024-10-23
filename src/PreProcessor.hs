@@ -4,31 +4,31 @@ import qualified Data.Map as M
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 
 preprocess :: Program -> Int -> Bool -> Bool -> Bool -> Program
-preprocess program loopUnfoldingAmount fold removeUnreach normalize =
+preprocess program loopUnfoldingAmount fold removeUnreach simplify =
   let stmt' = stmt program
       stmt'' = unfoldWhile loopUnfoldingAmount stmt'
       stmt''' = if fold then foldConstantsInStmt stmt'' else stmt''
       stmt'''' = if removeUnreach then removeUnreachable stmt''' else stmt'''
-      stmt''''' = if normalize then normalizeStmt stmt'''' else stmt''''
+      stmt''''' = if simplify then simplifyStmt stmt'''' else stmt''''
    in program {stmt = stmt'''''}
 
 -- Normalize expressions within the program
-normalizeExpr :: Expr -> Expr
-normalizeExpr (Parens e) = normalizeExpr e -- Remove unnecessary parentheses
-normalizeExpr (BinopExpr Plus (LitI 0) e) = normalizeExpr e -- x + 0 -> x
-normalizeExpr (BinopExpr Plus e (LitI 0)) = normalizeExpr e -- 0 + x -> x
-normalizeExpr (BinopExpr Multiply (LitI 1) e) = normalizeExpr e -- x * 1 -> x
-normalizeExpr (BinopExpr Multiply e (LitI 1)) = normalizeExpr e -- 1 * x -> x
-normalizeExpr (BinopExpr Multiply (LitI 0) _) = LitI 0 -- x * 0 -> 0
-normalizeExpr (BinopExpr Multiply _ (LitI 0)) = LitI 0 -- 0 * x -> 0
-normalizeExpr (BinopExpr op e1 e2) = BinopExpr op (normalizeExpr e1) (normalizeExpr e2)
-normalizeExpr e = e
+simplifyExpr :: Expr -> Expr
+simplifyExpr (Parens e) = simplifyExpr e -- Remove unnecessary parentheses
+simplifyExpr (BinopExpr Plus (LitI 0) e) = simplifyExpr e -- x + 0 -> x
+simplifyExpr (BinopExpr Plus e (LitI 0)) = simplifyExpr e -- 0 + x -> x
+simplifyExpr (BinopExpr Multiply (LitI 1) e) = simplifyExpr e -- x * 1 -> x
+simplifyExpr (BinopExpr Multiply e (LitI 1)) = simplifyExpr e -- 1 * x -> x
+simplifyExpr (BinopExpr Multiply (LitI 0) _) = LitI 0 -- x * 0 -> 0
+simplifyExpr (BinopExpr Multiply _ (LitI 0)) = LitI 0 -- 0 * x -> 0
+simplifyExpr (BinopExpr op e1 e2) = BinopExpr op (simplifyExpr e1) (simplifyExpr e2)
+simplifyExpr e = e
 
-normalizeStmt :: Stmt -> Stmt
-normalizeStmt Skip = Skip
-normalizeStmt (Assign var expr) = Assign var (normalizeExpr expr)
-normalizeStmt (Seq s1 s2) = Seq (normalizeStmt s1) (normalizeStmt s2)
-normalizeStmt s = s
+simplifyStmt :: Stmt -> Stmt
+simplifyStmt Skip = Skip
+simplifyStmt (Assign var expr) = Assign var (simplifyExpr expr)
+simplifyStmt (Seq s1 s2) = Seq (simplifyStmt s1) (simplifyStmt s2)
+simplifyStmt s = s
 
 foldConstants :: Expr -> Expr
 foldConstants (BinopExpr Plus (LitI a) (LitI b)) = LitI (a + b)

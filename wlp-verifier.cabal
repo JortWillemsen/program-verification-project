@@ -53,10 +53,13 @@ build-type:         Simple
 
 library
     exposed-modules:    Main
-                      , FormulaProcessor
+                      , ProgramProcessor
+                      , DirectedCallGraphProcessor
                       , PreProcessor
                       , Z3Solver
                       , WLPVerifier
+                      , Helper
+                      , Types
 
     build-depends:      base   ^>=4.17.2.1
                       , containers
@@ -73,10 +76,13 @@ executable wlp-verifier
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules:    FormulaProcessor
+    other-modules:  , ProgramProcessor
+                    , DirectedCallGraphProcessor
                     , PreProcessor
                     , Z3Solver
                     , WLPVerifier
+                    , Helper
+                    , Types
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

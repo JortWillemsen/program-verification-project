@@ -6,6 +6,6 @@
 
 min(x:int | x:int) {
   assume (x >= 0);
-  x := x + 1;
+  x := 2;
   assert (x > 1)
 }

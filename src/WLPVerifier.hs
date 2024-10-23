@@ -2,10 +2,11 @@ module WLPVerifier where
 
 import Control.Monad.Cont (MonadIO (liftIO))
 import qualified Data.Map as M
-import FormulaProcessor (PostCondition, negateExpr, processAST, wlp)
+import DirectedCallGraphProcessor (programDCG, reversedProgramDCG)
 import GCLParser.GCLDatatype (Expr (..), Program (input, output, stmt))
 import GCLParser.Parser (parseGCLfile)
 import PreProcessor (makeUniqueForall, preprocess)
+import ProgramProcessor (negateExpr, processAST, wlp)
 import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
 import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
@@ -27,46 +28,54 @@ run file = do
 
     -- If parsing succeeds, proceed with the verification
     Right program -> do
-      let uniqueProgram = makeUniqueForall program
+      let asdf = stmt program
 
-      -- Step 2: Preprocess the parsed program
-      -- Preprocess the program with a maximum recursion depth of 10 and flags enabled
+      let yeet = reversedProgramDCG asdf
 
-      -- print uniqueProgram
+      print yeet
 
-      putStrLn ""
+      return False
 
-      let preprocessedProgram = preprocess uniqueProgram 4 True True True
+-- let uniqueProgram = makeUniqueForall program
 
-      -- Step 3: Compute the WLP (Weakest Liberal Precondition) expression
-      -- Here, 'LitB True' represents the postcondition we are verifying against
-      let processedWlp = wlp (stmt preprocessedProgram) (LitB True)
+-- -- Step 2: Preprocess the parsed program
+-- -- Preprocess the program with a maximum recursion depth of 10 and flags enabled
 
-      -- print processedWlp
+-- -- print uniqueProgram
 
-      putStrLn ""
+-- putStrLn ""
 
-      -- Step 4: Run the Z3 solver
-      evalZ3 $ do
-        -- Create the environment for Z3 with the WLP expression
-        env1 <- buildEnv (input uniqueProgram ++ output uniqueProgram ++ getVarDeclarations (stmt uniqueProgram)) (wlp (stmt uniqueProgram) (LitB True)) M.empty
+-- let preprocessedProgram = preprocess uniqueProgram 10 True True True
 
-        -- liftIO $ print env1
+-- -- Step 3: Compute the WLP (Weakest Liberal Precondition) expression
+-- -- Here, 'LitB True' represents the postcondition we are verifying against
+-- let processedWlp = wlp (stmt preprocessedProgram) (LitB True)
 
-        -- Negate the WLP expression and convert it to a Z3 expression
-        z3Expr <- exprToZ3 (negateExpr processedWlp) env1
+-- -- print processedWlp
 
-        -- liftIO $ print z3Expr
+-- putStrLn ""
 
-        -- Assert the Z3 expression and check the satisfiability
-        assert z3Expr
-        resultZ3 <- check
+-- -- Step 4: Run the Z3 solver
+-- evalZ3 $ do
+--   -- Create the environment for Z3 with the WLP expression
+--   env1 <- buildEnv (input uniqueProgram ++ output uniqueProgram ++ getVarDeclarations (stmt uniqueProgram)) (wlp (stmt uniqueProgram) (LitB True)) M.empty
 
-        -- Step 5: Handle the result from the Z3 solver
-        case resultZ3 of
-          -- If satisfiable, the program is invalid (counterexample exists)
-          Sat -> return False
-          -- If unsatisfiable, the program is valid (no counterexample exists)
-          Unsat -> return True
-          -- In any other case, return False as a fallback
-          _ -> return False
+--   -- liftIO $ print env1
+
+--   -- Negate the WLP expression and convert it to a Z3 expression
+--   z3Expr <- exprToZ3 (negateExpr processedWlp) env1
+
+--   -- liftIO $ print z3Expr
+
+--   -- Assert the Z3 expression and check the satisfiability
+--   assert z3Expr
+--   resultZ3 <- check
+
+--   -- Step 5: Handle the result from the Z3 solver
+--   case resultZ3 of
+--     -- If satisfiable, the program is invalid (counterexample exists)
+--     Sat -> return False
+--     -- If unsatisfiable, the program is valid (no counterexample exists)
+--     Unsat -> return True
+--     -- In any other case, return False as a fallback
+--     _ -> return False
