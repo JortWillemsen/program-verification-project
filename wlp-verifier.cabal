@@ -60,6 +60,7 @@ library
                       , WLPVerifier
                       , Helper
                       , Types
+                      , DCG
 
     build-depends:      base   ^>=4.17.2.1
                       , containers

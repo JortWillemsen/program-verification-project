@@ -10,6 +10,8 @@ import ProgramProcessor (negateExpr, processAST, wlp)
 import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
 import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
+import DCG
+import Prelude
 
 -- | Runs the entire verification process on a given GCL file.
 -- Takes a file path as input and returns 'True' if the program is valid,
@@ -32,7 +34,7 @@ run file = do
 
       let yeet = reversedProgramDCG asdf
 
-      print yeet
+      putStrLn $ printDCG yeet
 
       return False
 
