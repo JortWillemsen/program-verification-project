@@ -1,26 +1,13 @@
 module DirectedCallGraphProcessor where
 
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Program (..), Stmt (..), Type (..), VarDeclaration (..))
-
+import Control.Monad.IO.Class (liftIO)
 import ProgramProcessor
 import Types (PostCondition)
 import DCG
 import Helper (replaceAssignStmt)
 import Z3Solver (Env, exprToZ3, buildEnv, getVarDeclarations)
 import Z3.Monad
-
-flattenProgram :: Stmt -> [Stmt]
-flattenProgram Skip = []
-flattenProgram stmt@(Assert _) = [stmt]
-flattenProgram stmt@(Assume _) = [stmt]
-flattenProgram stmt@(Assign _ _) = [stmt]
-flattenProgram stmt@(AAssign _ _ _) = [stmt]
-flattenProgram stmt@(DrefAssign _ _) = [stmt]
-flattenProgram (Seq s1 s2) = flattenProgram s1 ++ flattenProgram s2
-flattenProgram stmt@(IfThenElse _ _ _) = [stmt] -- Leave IfThenElse unchanged
-flattenProgram stmt@(While _ _) = [stmt] -- Leave While unchanged
-flattenProgram stmt@(Block _ _) = [stmt] -- Leave Block unchanged
-flattenProgram stmt@(TryCatch _ _ _) = [stmt] -- Leave TryCatch unchanged
 
 programDCG :: Stmt -> DCG Stmt
 programDCG Skip = Empty
@@ -38,6 +25,14 @@ combineDCG (Leaf x) t2 = (SeqNode x t2)
 combineDCG (Empty) t2 = t2
 combineDCG (Node l x r) t2 = Node (combineDCG l t2) x (combineDCG r t2)
 combineDCG (SeqNode x c) t2 = SeqNode x (combineDCG c t2)
+
+dcgToPaths :: DCG a -> [DCG a]
+dcgToPaths Empty = []
+dcgToPaths (Leaf a) = [Leaf a]
+dcgToPaths (SeqNode a dcg) = [SeqNode a path | path <- dcgToPaths dcg]
+dcgToPaths (Node left a right) = 
+    [path | path <- dcgToPaths left] ++ 
+    [path | path <- dcgToPaths right]
 
 wlpDCG :: DCG Stmt -> DCG PostCondition
 wlpDCG dcg = wlpDCG' (dcg, LitB True)
@@ -69,12 +64,15 @@ wlpDCG dcg = wlpDCG' (dcg, LitB True)
       where
         pc' = wlp x pc
 
-solveZ3DCG :: (MonadZ3 z3) => DCG PostCondition -> Env -> z3 [Bool]
-solveZ3DCG Empty env = return [True]
+solveZ3DCGs :: (MonadZ3 z3) => [DCG PostCondition] -> Env -> z3 [Bool]
+solveZ3DCGs l env = mapM (\dcg -> solveZ3DCG dcg env) l
+
+solveZ3DCG :: (MonadZ3 z3) => DCG PostCondition -> Env -> z3 Bool
+solveZ3DCG Empty env = return True
 solveZ3DCG (Node l x r) env = do
   l' <- solveZ3DCG l env 
   r' <- solveZ3DCG r env
-  return $ l' ++ r'
+  return $ l' && r'
 solveZ3DCG (SeqNode x c) env = do
   c' <- solveZ3DCG c env
   return c'
@@ -84,10 +82,13 @@ solveZ3DCG (Leaf x) env = do
   
   z3ExprNot <- mkNot (z3Expr)
 
+
   assert z3ExprNot
   result <- check
 
+  liftIO $ putStrLn (show x ++ " IS " ++ show result)
+
   case result of
-    Sat -> return [False]
-    Unsat -> return [True]
-    _ -> return [False]
+    Sat -> return False
+    Unsat -> return True
+    _ -> return False

@@ -2,7 +2,7 @@ module WLPVerifier where
 
 import Control.Monad.Cont (MonadIO (liftIO))
 import qualified Data.Map as M
-import DirectedCallGraphProcessor (programDCG, wlpDCG, flattenProgram, solveZ3DCG)
+import DirectedCallGraphProcessor (dcgToPaths, programDCG, wlpDCG, solveZ3DCGs)
 import GCLParser.GCLDatatype (Expr (..), Program (input, output, stmt))
 import GCLParser.Parser (parseGCLfile)
 import PreProcessor (makeUniqueForall, preprocess)
@@ -38,16 +38,21 @@ run file = do
       
       putStrLn $ printDCG pdcg
 
-      -- let wlpdcg = wlpDCG pdcg
+      let paths = dcgToPaths pdcg
 
-      -- putStrLn $ printDCG wlpdcg
+      let wlpPaths = map (\p -> wlpDCG $ reverseDCG p) paths
 
-      -- result <- evalZ3 $ do
-      --   env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt program) (LitB True)) M.empty
+      let stringpaths = map (\p -> printDCG p) wlpPaths
 
-      --   solveZ3DCG wlpdcg env1
+      putStrLn $ concat stringpaths
 
-      -- putStrLn (show result)
+      result <- evalZ3 $ do
+        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt program) (LitB True)) M.empty
 
-      -- return (all (\x -> x) result)
-      return True
+        list <- solveZ3DCGs wlpPaths env1
+
+        return list
+
+      putStrLn (show result)
+
+      return (all (\x -> x) result)

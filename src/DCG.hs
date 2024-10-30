@@ -8,6 +8,17 @@ data DCG a
   | Leaf a
   | Empty
 
+reverseDCG :: DCG a -> DCG a
+reverseDCG = go []  -- Use an empty list as an accumulator
+  where
+    -- Accumulate nodes in a list, then convert back to a DCG structure at the end
+    go acc (SeqNode x next) = go (x : acc) next
+    go acc (Leaf x)         = toDCG (x : acc)
+
+    -- Convert a list of elements back to the DCG structure
+    toDCG []     = error "Empty list - should not happen"
+    toDCG [x]    = Leaf x
+    toDCG (x:xs) = SeqNode x (toDCG xs)
 
 printDCG :: (Show a) => DCG a -> String
 printDCG dcg = printDCG' dcg 0
