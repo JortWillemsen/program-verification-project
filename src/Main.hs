@@ -19,5 +19,5 @@ import Z3Solver (createEnv, exprToZ3)
 
 main :: IO ()
 main = do
-  isValid <- run "examples/S1.gcl"
+  isValid <- run "examples/E.gcl"
   putStrLn $ "Is the program valid? " ++ show isValid

@@ -15,9 +15,11 @@ programDCG stmt@(Assert _) = Leaf stmt
 programDCG stmt@(Assume _) = Leaf stmt
 programDCG stmt@(Assign _ _) = Leaf stmt
 programDCG stmt@(AAssign _ _ _) = Leaf stmt
+programDCG (Seq (Skip) s2) = programDCG s2
+programDCG (Seq s1 (Skip)) = programDCG s1
 programDCG (Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
 programDCG stmt@(IfThenElse e s1 s2) = Node (SeqNode (Assume e) (programDCG s1)) stmt (SeqNode (Assume (OpNeg e)) (programDCG s2))
-programDCG stmt@(While e s) = Node (SeqNode (Assume (OpNeg e)) Empty) stmt (SeqNode (Assume e) (programDCG stmt))
+programDCG stmt@(While e s) = Node (SeqNode (Assume (OpNeg e)) Empty) stmt (SeqNode (Assume e) (SeqNode s (programDCG stmt)))
 programDCG stmt@(Block _ s) = programDCG s
 
 combineDCG :: DCG Stmt -> DCG Stmt -> DCG Stmt
@@ -26,13 +28,20 @@ combineDCG (Empty) t2 = t2
 combineDCG (Node l x r) t2 = Node (combineDCG l t2) x (combineDCG r t2)
 combineDCG (SeqNode x c) t2 = SeqNode x (combineDCG c t2)
 
-dcgToPaths :: DCG a -> [DCG a]
-dcgToPaths Empty = []
-dcgToPaths (Leaf a) = [Leaf a]
-dcgToPaths (SeqNode a dcg) = [SeqNode a path | path <- dcgToPaths dcg]
-dcgToPaths (Node left a right) = 
-    [path | path <- dcgToPaths left] ++ 
-    [path | path <- dcgToPaths right]
+dcgToPaths :: DCG a -> Int -> [DCG a]
+dcgToPaths dcg k = dcgToPathsToK dcg 0 k
+
+dcgToPathsToK :: DCG a -> Int -> Int -> [DCG a]
+dcgToPathsToK Empty i k = []
+dcgToPathsToK (Leaf a) i k = [Leaf a]
+dcgToPathsToK (SeqNode a dcg) i k
+  | i <= k =  [SeqNode a path | path <- dcgToPathsToK dcg (i+1) k]
+  | otherwise = [Leaf a]
+dcgToPathsToK (Node left a right) i k
+  | i <= k =
+    [path | path <- dcgToPathsToK left (i+1) k] ++ 
+    [path | path <- dcgToPathsToK right (i+1) k]
+  | otherwise = [Leaf a]
 
 wlpDCG :: DCG Stmt -> DCG PostCondition
 wlpDCG dcg = wlpDCG' (dcg, LitB True)
@@ -85,8 +94,6 @@ solveZ3DCG (Leaf x) env = do
 
   assert z3ExprNot
   result <- check
-
-  liftIO $ putStrLn (show x ++ " IS " ++ show result)
 
   case result of
     Sat -> return False

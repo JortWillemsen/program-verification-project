@@ -6,8 +6,8 @@ import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 preprocess :: Program -> Int -> Bool -> Bool -> Bool -> Program
 preprocess program loopUnfoldingAmount fold removeUnreach simplify =
   let stmt' = stmt program
-      stmt'' = unfoldWhile loopUnfoldingAmount stmt'
-      stmt''' = if fold then foldConstantsInStmt stmt'' else stmt''
+      -- stmt'' = unfoldWhile loopUnfoldingAmount stmt'
+      stmt''' = if fold then foldConstantsInStmt stmt' else stmt'
       stmt'''' = if removeUnreach then removeUnreachable stmt''' else stmt'''
       stmt''''' = if simplify then simplifyStmt stmt'''' else stmt''''
    in program {stmt = stmt'''''}
