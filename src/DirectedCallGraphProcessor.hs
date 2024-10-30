@@ -25,7 +25,7 @@ programDCG (Seq Skip s2) = programDCG s2
 programDCG (Seq s1 Skip) = programDCG s1
 programDCG (Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
 programDCG stmt@(IfThenElse e s1 s2) = Node (SeqNode (Assume e) (programDCG s1)) stmt (SeqNode (Assume (OpNeg e)) (programDCG s2))
-programDCG stmt@(While e s) = programDCG $ programWhile stmt 3
+programDCG stmt@(While e s) = programDCG $ programWhile stmt 10
 programDCG stmt@(Block _ s) = programDCG s
 
 programWhile :: Stmt -> Int -> Stmt

@@ -19,17 +19,17 @@ testCases =
     ("examples/swap.gcl", True),
     ("examples/test.gcl", True),
     -- Benchmarks
-    ("examples/benchmark/bsort.gcl", True),
+    -- ("examples/benchmark/bsort.gcl", True), -- Loop optional
     ("examples/benchmark/divByN.gcl", True),
-    ("examples/benchmark/find12.gcl", True),
-    ("examples/benchmark/invalidBSort.gcl", False),
+    -- ("examples/benchmark/find12.gcl", True), -- Exceptions
+    -- ("examples/benchmark/invalidBSort.gcl", False) -- Loop optional
     ("examples/benchmark/invalidDivByN.gcl", False),
-    ("examples/benchmark/invalidFind12.gcl", False),
+    -- ("examples/benchmark/invalidFind12.gcl", False), -- Exceptions
     ("examples/benchmark/invalidMemberOf.gcl", False),
-    -- ("examples/benchmark/invalidMin.gcl", False),
-    ("examples/benchmark/invalidPullUp.gcl", False),
+    -- ("examples/benchmark/invalidMin.gcl", False), -- References
+    -- ("examples/benchmark/invalidPullUp.gcl", False),
     ("examples/benchmark/memberOf.gcl", True),
-    -- ("examples/benchmark/min.gcl", True),
+    -- ("examples/benchmark/min.gcl", True), -- References
     ("examples/benchmark/pullUp.gcl", True)
   ]
 

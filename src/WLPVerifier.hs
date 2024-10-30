@@ -32,7 +32,7 @@ run file = do
     Right program -> do
       let uniqueProgram = makeUniqueForall program
 
-      let preprocessedProgram = preprocess uniqueProgram 10 True True True
+      let preprocessedProgram = preprocess uniqueProgram True True True
 
       let pdcg = programDCG $ stmt preprocessedProgram
 
@@ -42,15 +42,15 @@ run file = do
 
       let stringpaths = map printDCG wlpPaths
 
-      putStrLn $ concat stringpaths
+      -- putStrLn $ concat stringpaths
 
       result <- evalZ3 $ do
         env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt preprocessedProgram) (LitB True)) M.empty
 
-        liftIO $ print env1
+        -- liftIO $ print env1
 
         solveZ3DCGs wlpPaths env1
 
-      print result
+      -- print result
 
       return $ and result
