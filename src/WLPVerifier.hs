@@ -38,8 +38,17 @@ run file = do
       
       let pdcg = programDCG flattened
       
+      putStrLn $ printDCG pdcg
+
       let wlpdcg = wlpDCG pdcg
 
-      let result = solveZ3DCG wlpdcg uniqueProgram M.empty
+      putStrLn $ printDCG wlpdcg
 
-      result
+      result <- evalZ3 $ do
+        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt program) (LitB True)) M.empty
+
+        solveZ3DCG wlpdcg env1
+
+      putStrLn (show result)
+
+      return (all (\x -> x) result)

@@ -4,7 +4,14 @@
 //  assert ((z = x) || (z = y))
 // }
 
-min(x:int | x:int) {
+test(x:int | x:int) {
   assume (x >= 0);
-  x := 2
+  
+  if (x > 0) then {
+    x := x + 1
+  } else {
+    x := x - 1
+  };
+  
+  assert (x >= 1)
 }
