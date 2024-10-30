@@ -19,8 +19,13 @@ programDCG (Seq (Skip) s2) = programDCG s2
 programDCG (Seq s1 (Skip)) = programDCG s1
 programDCG (Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
 programDCG stmt@(IfThenElse e s1 s2) = Node (SeqNode (Assume e) (programDCG s1)) stmt (SeqNode (Assume (OpNeg e)) (programDCG s2))
-programDCG stmt@(While e s) = Node (SeqNode (Assume (OpNeg e)) Empty) stmt (SeqNode (Assume e) (SeqNode s (programDCG stmt)))
+programDCG stmt@(While e s) = programDCG $ programWhile stmt 3
 programDCG stmt@(Block _ s) = programDCG s
+
+programWhile :: Stmt -> Int -> Stmt
+programWhile stmt@(While e s) k
+  | k == 0 = Assume (OpNeg e)
+  | k > 0  = IfThenElse e (Seq s (programWhile stmt (k-1))) Skip
 
 combineDCG :: DCG Stmt -> DCG Stmt -> DCG Stmt
 combineDCG (Leaf x) t2 = (SeqNode x t2)
@@ -28,21 +33,13 @@ combineDCG (Empty) t2 = t2
 combineDCG (Node l x r) t2 = Node (combineDCG l t2) x (combineDCG r t2)
 combineDCG (SeqNode x c) t2 = SeqNode x (combineDCG c t2)
 
-dcgToPaths :: DCG a -> Int -> [DCG a]
-dcgToPaths dcg k = dcgToPathsToK dcg 0 k
-
-dcgToPathsToK :: DCG a -> Int -> Int -> [DCG a]
-dcgToPathsToK Empty i k = []
-dcgToPathsToK (Leaf a) i k = [Leaf a]
-dcgToPathsToK (SeqNode a dcg) i k
-  | i <= k =  [SeqNode a path | path <- dcgToPathsToK dcg (i+1) k]
-  | otherwise = [Leaf a]
-dcgToPathsToK (Node left a right) i k
-  | i <= k =
-    [path | path <- dcgToPathsToK left (i+1) k] ++ 
-    [path | path <- dcgToPathsToK right (i+1) k]
-  | otherwise = [Leaf a]
-
+dcgToPaths :: DCG a -> [DCG a]
+dcgToPaths Empty = []
+dcgToPaths (Leaf a) = [Leaf a]
+dcgToPaths (SeqNode a dcg) =  [SeqNode a path | path <- dcgToPaths dcg]
+dcgToPaths (Node left a right) =
+    [path | path <- dcgToPaths left] ++ 
+    [path | path <- dcgToPaths right]
 wlpDCG :: DCG Stmt -> DCG PostCondition
 wlpDCG dcg = wlpDCG' (dcg, LitB True)
   where

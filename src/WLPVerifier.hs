@@ -36,7 +36,7 @@ run file = do
             
       let pdcg = programDCG $ stmt preprocessedProgram
       
-      let paths = dcgToPaths pdcg 50
+      let paths = dcgToPaths pdcg
 
       let wlpPaths = map (\p -> wlpDCG $ reverseDCG p) paths
 
