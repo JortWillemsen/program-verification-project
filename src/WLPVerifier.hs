@@ -1,8 +1,9 @@
 module WLPVerifier where
 
 import Control.Monad.Cont (MonadIO (liftIO))
+import DCG
 import qualified Data.Map as M
-import DirectedCallGraphProcessor (dcgToPaths, programDCG, wlpDCG, solveZ3DCGs)
+import DirectedCallGraphProcessor (dcgToPaths, programDCG, solveZ3DCGs, wlpDCG)
 import GCLParser.GCLDatatype (Expr (..), Program (input, output, stmt))
 import GCLParser.Parser (parseGCLfile)
 import PreProcessor (makeUniqueForall, preprocess)
@@ -10,7 +11,6 @@ import ProgramProcessor (negateExpr, processAST, wlp)
 import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
 import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
-import DCG
 import Prelude
 
 -- | Runs the entire verification process on a given GCL file.
@@ -31,26 +31,26 @@ run file = do
     -- If parsing succeeds, proceed with the verification
     Right program -> do
       let uniqueProgram = makeUniqueForall program
-      
+
       let preprocessedProgram = preprocess uniqueProgram 10 True True True
-            
+
       let pdcg = programDCG $ stmt preprocessedProgram
-      
+
       let paths = dcgToPaths pdcg
 
-      let wlpPaths = map (\p -> wlpDCG $ reverseDCG p) paths
+      let wlpPaths = map (wlpDCG . reverseDCG) paths
 
-      let stringpaths = map (\p -> printDCG p) wlpPaths
+      let stringpaths = map printDCG wlpPaths
 
       putStrLn $ concat stringpaths
 
       result <- evalZ3 $ do
-        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt program) (LitB True)) M.empty
+        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt preprocessedProgram) (LitB True)) M.empty
 
-        list <- solveZ3DCGs wlpPaths env1
+        liftIO $ print env1
 
-        return list
+        solveZ3DCGs wlpPaths env1
 
-      putStrLn (show result)
+      print result
 
-      return (all (\x -> x) result)
+      return $ and result
