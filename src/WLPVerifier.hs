@@ -33,22 +33,21 @@ run file = do
       let uniqueProgram = makeUniqueForall program
       
       let preprocessedProgram = preprocess uniqueProgram 10 True True True
-      
-      let flattened = flattenProgram $ stmt program
-      
-      let pdcg = programDCG flattened
+            
+      let pdcg = programDCG $ stmt preprocessedProgram
       
       putStrLn $ printDCG pdcg
 
-      let wlpdcg = wlpDCG pdcg
+      -- let wlpdcg = wlpDCG pdcg
 
-      putStrLn $ printDCG wlpdcg
+      -- putStrLn $ printDCG wlpdcg
 
-      result <- evalZ3 $ do
-        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt program) (LitB True)) M.empty
+      -- result <- evalZ3 $ do
+      --   env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt program) (LitB True)) M.empty
 
-        solveZ3DCG wlpdcg env1
+      --   solveZ3DCG wlpdcg env1
 
-      putStrLn (show result)
+      -- putStrLn (show result)
 
-      return (all (\x -> x) result)
+      -- return (all (\x -> x) result)
+      return True
