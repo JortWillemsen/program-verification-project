@@ -34,18 +34,20 @@ run file = do
 
       let preprocessedProgram = preprocess uniqueProgram True True True
 
-      let pdcg = programDCG $ stmt preprocessedProgram
+      result <- evalZ3 $ do
 
-      let paths = dcgToPaths pdcg
+        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt preprocessedProgram) (LitB True)) M.empty
 
-      let wlpPaths = map (wlpDCG . reverseDCG) paths
+        pdcg <- programDCG env1 $ stmt preprocessedProgram
 
-      let stringpaths = map printDCG wlpPaths
+        let paths = dcgToPaths pdcg
+
+        wlpPaths <- mapM (wlpDCG . reverseDCG) paths
+
+        let stringpaths = map printDCG wlpPaths
 
       -- putStrLn $ concat stringpaths
 
-      result <- evalZ3 $ do
-        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt preprocessedProgram) (LitB True)) M.empty
 
         -- liftIO $ print env1
 

@@ -15,18 +15,42 @@ import Z3.Monad
   )
 import Z3Solver (Env, buildEnv, exprToZ3, getVarDeclarations)
 
-programDCG :: Stmt -> DCG Stmt
-programDCG Skip = Empty
-programDCG stmt@(Assert _) = Leaf stmt
-programDCG stmt@(Assume _) = Leaf stmt
-programDCG stmt@(Assign _ _) = Leaf stmt
-programDCG stmt@(AAssign {}) = Leaf stmt
-programDCG (Seq Skip s2) = programDCG s2
-programDCG (Seq s1 Skip) = programDCG s1
-programDCG (Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
-programDCG stmt@(IfThenElse e s1 s2) = Node (SeqNode (Assume e) (programDCG s1)) stmt (SeqNode (Assume (OpNeg e)) (programDCG s2))
-programDCG stmt@(While e s) = programDCG $ programWhile stmt 10
-programDCG stmt@(Block _ s) = programDCG s
+programDCG :: (MonadZ3 z3) => Env -> Stmt -> z3 (DCG Stmt)
+programDCG env Skip = return Empty
+programDCG env stmt@(Assert _) = return $ Leaf stmt
+programDCG env stmt@(Assume _) = return $ Leaf stmt
+programDCG env stmt@(Assign _ _) = return $ Leaf stmt
+programDCG env stmt@(AAssign {}) = return $ Leaf stmt
+programDCG env (Seq Skip s2) = programDCG env s2
+programDCG env (Seq s1 Skip) = programDCG env s1
+programDCG env (Seq s1 s2) = do
+  x1 <- programDCG env s1
+  x2 <- programDCG env s2
+
+  return $ combineDCG x1 x2
+programDCG env stmt@(IfThenElse e s1 s2) = do
+  x1 <- programDCG env s1
+  p1 <- prunePath env x1
+  x2 <- programDCG env s2
+  p2 <- prunePath env x2
+
+  return $ Node (SeqNode (Assume e) p1) stmt (SeqNode (Assume (OpNeg e)) p2)
+programDCG env stmt@(While e s) = programDCG env (programWhile stmt 10)
+programDCG env stmt@(Block _ s) = programDCG env s
+
+prunePath :: (MonadZ3 z3) => Env -> DCG Stmt -> z3 (DCG Stmt)
+prunePath env dcg = do
+  -- Calculate WLP of path
+  wlp <- wlpDCG dcg
+
+  -- Check if path is feasible
+  feasible <- feasibleZ3 wlp env
+
+  -- Return True if path is not feasible
+  -- Return False if feasible (As to not prune it)
+  if feasible 
+    then return dcg 
+    else return Empty
 
 programWhile :: Stmt -> Int -> Stmt
 programWhile stmt@(While e s) k
@@ -47,8 +71,8 @@ dcgToPaths (Node left a right) =
   dcgToPaths left
     ++ dcgToPaths right
 
-wlpDCG :: DCG Stmt -> DCG PostCondition
-wlpDCG dcg = wlpDCG' (dcg, LitB True)
+wlpDCG :: (MonadZ3 z3) => DCG Stmt -> z3 (DCG PostCondition)
+wlpDCG dcg = return $ wlpDCG' (dcg, LitB True)
   where
     wlpDCG' :: (DCG Stmt, PostCondition) -> DCG PostCondition
     wlpDCG' (Empty, _) = Empty
@@ -77,17 +101,17 @@ wlpDCG dcg = wlpDCG' (dcg, LitB True)
         pc' = wlp x pc
 
 solveZ3DCGs :: (MonadZ3 z3) => [DCG PostCondition] -> Env -> z3 [Bool]
-solveZ3DCGs l env = mapM (`solveZ3DCG` env) l
+solveZ3DCGs l env = mapM (\x ->do f <- x `feasibleZ3` env; return $ not f) l
 
-solveZ3DCG :: (MonadZ3 z3) => DCG PostCondition -> Env -> z3 Bool
-solveZ3DCG Empty env = return True
-solveZ3DCG (Node l x r) env = do
-  l' <- solveZ3DCG l env
-  r' <- solveZ3DCG r env
+feasibleZ3 :: (MonadZ3 z3) => DCG PostCondition -> Env -> z3 Bool
+feasibleZ3 Empty env = return True
+feasibleZ3 (Node l x r) env = do
+  l' <- feasibleZ3 l env
+  r' <- feasibleZ3 r env
   return $ l' && r'
-solveZ3DCG (SeqNode x c) env = do
-  solveZ3DCG c env
-solveZ3DCG (Leaf x) env = do
+feasibleZ3 (SeqNode x c) env = do
+  feasibleZ3 c env
+feasibleZ3 (Leaf x) env = do
   z3Expr <- exprToZ3 x env
 
   z3ExprNot <- mkNot z3Expr
@@ -96,6 +120,6 @@ solveZ3DCG (Leaf x) env = do
   result <- check
 
   case result of
-    Sat -> return False
-    Unsat -> return True
-    _ -> return False
+    Sat -> return True
+    Unsat -> return False
+    _ -> return True
