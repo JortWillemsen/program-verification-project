@@ -35,17 +35,17 @@ programDCG stmt@(GCL.Block decls s) =  DeclNode decls $ programDCG s
 -- Function that returns true if a path needs to be pruned
 prunePath :: (MonadZ3 z3) => Path -> z3 Bool
 prunePath (Path stmts env) = do
-  let conj = makeConjunction stmts (GCL.LitB True)
+  if (length stmts < 1000) 
+    then return True 
+  else do
 
-  feasible <- validZ3 conj env
+    let conj = makeConjunction stmts (GCL.LitB True)
+    -- liftIO $ putStrLn $ "Conjunction: " ++ show conj
 
-  -- return $ case feasible of
-  --   -- feasible, thus keep
-  --   True -> trace (show conj ++ "  KEEP") $ True
-  --   -- infeasible, thus prune
-  --   False -> trace (show conj ++ " PRUNE") False
+    feasible <- validZ3 conj env
+    -- liftIO $ putStrLn $ "Feasible: " ++ show feasible
 
-  return feasible
+    return feasible
 
 -- Function that creates a conjunction of the path
 -- meaning all assumptions should be true

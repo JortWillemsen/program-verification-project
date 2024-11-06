@@ -50,11 +50,11 @@ run file = do
         prunedPaths <- filterM prunePath envPaths
 
 
-        liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
-        liftIO $ putStrLn (concatMap (\p -> show (wlp p) ++ "\n") envPaths)
+        -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
+        -- liftIO $ putStrLn (concatMap (\p -> show (wlp p) ++ "\n") envPaths)
         -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") prunedPaths)
 
-        liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
+        -- liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
 
         r <- mapM validatePath prunedPaths
 
