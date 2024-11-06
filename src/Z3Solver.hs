@@ -1,7 +1,6 @@
 module Z3Solver where
 
 import qualified Data.Map as M
-import Debug.Trace (trace)
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
 import Z3.Monad
   ( AST,
@@ -36,20 +35,15 @@ import Z3.Monad
     mkStringSymbol,
     mkSub,
     mkTrue,
-    toApp,
+    toApp, mkFreshVar,
   )
+import Types (Path (Path), Statement (Decl), Env)
+import Control.Monad (foldM)
 
-type Env = M.Map String AST
-
-buildEnv :: (MonadZ3 z3) => [VarDeclaration] -> Expr -> Env -> z3 Env
-buildEnv [] e env = createEnv e env -- If no declarations, just return the result of createEnv
-buildEnv (decl : decls) e env = do
-  -- Add the first declaration to the environment
-  env1 <- addDeclToEnv decl env
-  -- Create environment from the expression
-  env2 <- createEnv e env1
-  -- Process the rest of the declarations recursively
-  buildEnv decls e env2
+buildEnv :: (MonadZ3 z3) => [Statement] -> [VarDeclaration] -> z3 Env
+buildEnv path decls = do
+  let declarations = decls ++ getVarDeclarations path
+  foldM (flip addDeclToEnv) M.empty declarations
 
 -- Add a single variable declaration to the environment
 addDeclToEnv :: (MonadZ3 z3) => VarDeclaration -> Env -> z3 Env
@@ -83,57 +77,49 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
       return $ M.insert str freshArray env
 
 -- Build the environment from the given expression
-createEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
-createEnv LitNull cEnv = return cEnv
-createEnv (Forall str e) cEnv = case M.lookup str cEnv of
-  Just _ -> createEnv e cEnv
-  Nothing -> do
-    freshVar <- mkFreshIntVar str
-    createEnv e $ M.insert str freshVar cEnv
-createEnv (Exists str e) cEnv = case M.lookup str cEnv of
-  Just _ -> createEnv e cEnv
-  Nothing -> do
-    freshVar <- mkFreshIntVar str
-    createEnv e $ M.insert str freshVar cEnv
-createEnv (Var n) cEnv = case M.lookup n cEnv of
-  Just _ -> return cEnv
-  Nothing -> do
-    freshVar <- mkFreshIntVar n
-    return $ M.insert n freshVar cEnv
-createEnv (ArrayElem e1 i) cEnv = do
-  env' <- createEnv e1 cEnv
-  createEnv i env'
-createEnv (Parens e) cEnv = createEnv e cEnv
-createEnv (OpNeg e) cEnv = createEnv e cEnv
-createEnv (BinopExpr _ e1 e2) cEnv = do
-  env1 <- createEnv e1 cEnv
-  createEnv e2 env1
-createEnv (RepBy arr i v) cEnv = do
-  env1 <- createEnv arr cEnv
-  env2 <- createEnv i env1
-  createEnv v env2
-createEnv (Cond g e1 e2) cEnv = do
-  env1 <- createEnv g cEnv
-  env2 <- createEnv e1 env1
-  createEnv e2 env2
-createEnv (SizeOf e) cEnv = createEnv e cEnv
-createEnv (NewStore e) cEnv = createEnv e cEnv
-createEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as is
-createEnv (LitI _) cEnv = return cEnv
-createEnv (LitB _) cEnv = return cEnv
+-- createEnv :: (MonadZ3 z3) => Env -> z3 Env
+-- createEnv LitNull cEnv = return cEnv
+-- createEnv (Forall str e) cEnv = case M.lookup str cEnv of
+--   Just _ -> createEnv cEnv
+--   Nothing -> do
+--     freshVar <- mkFreshIntVar str
+--     createEnv $ M.insert str freshVar cEnv
+-- createEnv (Exists str e) cEnv = case M.lookup str cEnv of
+--   Just _ -> createEnv cEnv
+--   Nothing -> do
+--     freshVar <- mkFreshIntVar str
+--     createEnv $ M.insert str freshVar cEnv
+-- createEnv (Var n) cEnv = case M.lookup n cEnv of
+--   Just _ -> return cEnv
+--   Nothing -> do
+--     freshVar <- mkFreshIntVar n
+--     return $ M.insert n freshVar cEnv
+-- createEnv (ArrayElem e1 i) cEnv = do
+--   env' <- createEnv e1 cEnv
+--   createEnv i env'
+-- createEnv (Parens e) cEnv = createEnv cEnv
+-- createEnv (OpNeg e) cEnv = createEnv cEnv
+-- createEnv (BinopExpr _ e1 e2) cEnv = do
+--   env1 <- createEnv e1 cEnv
+--   createEnv e2 env1
+-- createEnv (RepBy arr i v) cEnv = do
+--   env1 <- createEnv arr cEnv
+--   env2 <- createEnv i env1
+--   createEnv v env2
+-- createEnv (Cond g e1 e2) cEnv = do
+--   env1 <- createEnv g cEnv
+--   env2 <- createEnv e1 env1
+--   createEnv e2 env2
+-- createEnv (SizeOf e) cEnv = createEnv cEnv
+-- createEnv (NewStore e) cEnv = createEnv cEnv
+-- createEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as is
+-- createEnv (LitI _) cEnv = return cEnv
+-- createEnv (LitB _) cEnv = return cEnv
 
-getVarDeclarations :: Stmt -> [VarDeclaration]
-getVarDeclarations Skip = []
-getVarDeclarations (Assert _) = []
-getVarDeclarations (Assume _) = []
-getVarDeclarations (Assign _ _) = []
-getVarDeclarations (DrefAssign _ _) = []
-getVarDeclarations (AAssign {}) = []
-getVarDeclarations (Seq s1 s2) = getVarDeclarations s1 ++ getVarDeclarations s2
-getVarDeclarations (IfThenElse _ s1 s2) = getVarDeclarations s1 ++ getVarDeclarations s2
-getVarDeclarations (While _ s) = getVarDeclarations s
-getVarDeclarations (Block vars s) = vars ++ getVarDeclarations s
-getVarDeclarations (TryCatch _ s1 s2) = getVarDeclarations s1 ++ getVarDeclarations s2
+getVarDeclarations :: [Statement] -> [VarDeclaration]
+getVarDeclarations [] = []
+getVarDeclarations ((Decl decls):xs) = decls ++ getVarDeclarations xs
+getVarDeclarations (x:xs) = getVarDeclarations xs
 
 exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
 exprToZ3 LitNull env = undefined -- optional

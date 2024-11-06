@@ -5,11 +5,17 @@
 // }
 
 test(x:int | x:int) {
-  assume (x > 0);
+  assume (x > 5);
 
-  while (x > 0) do {
-    x := x - 1
+  if (x > 5) then {
+    if (x < 3) then {
+      skip
+    } else {
+      skip
+    }
+  } else {
+    skip
   };
 
-  assert (x < 0)
+  assert (x > 5)
 }

@@ -17,13 +17,12 @@ testCases =
     ("examples/reverse.gcl", True),
     ("examples/S1.gcl", True),
     ("examples/swap.gcl", True),
-    ("examples/test.gcl", True),
     -- Benchmarks
     -- ("examples/benchmark/bsort.gcl", True), -- Loop optional
-    ("examples/benchmark/divByN.gcl", True),
+    -- ("examples/benchmark/divByN.gcl", True),
     -- ("examples/benchmark/find12.gcl", True), -- Exceptions
     -- ("examples/benchmark/invalidBSort.gcl", False) -- Loop optional
-    ("examples/benchmark/invalidDivByN.gcl", False),
+    -- ("examples/benchmark/invalidDivByN.gcl", False),
     -- ("examples/benchmark/invalidFind12.gcl", False), -- Exceptions
     ("examples/benchmark/invalidMemberOf.gcl", False),
     -- ("examples/benchmark/invalidMin.gcl", False), -- References

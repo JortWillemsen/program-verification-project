@@ -1,17 +1,18 @@
 module WLPVerifier where
 
-import Control.Monad.Cont (MonadIO (liftIO))
+import Control.Monad.Cont (MonadIO (liftIO), filterM)
 import DCG
 import qualified Data.Map as M
-import DirectedCallGraphProcessor (dcgToPaths, programDCG, solveZ3DCGs, wlpDCG)
+import DirectedCallGraphProcessor (programDCG, prunePath, dcgToStatements, statementsToPath, validatePath)
 import GCLParser.GCLDatatype (Expr (..), Program (input, output, stmt))
 import GCLParser.Parser (parseGCLfile)
 import PreProcessor (makeUniqueForall, preprocess)
-import ProgramProcessor (negateExpr, processAST, wlp)
+import ProgramProcessor (negateExpr, wlp)
 import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
 import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
 import Prelude
+import Text.ParserCombinators.ReadP (string)
 
 -- | Runs the entire verification process on a given GCL file.
 -- Takes a file path as input and returns 'True' if the program is valid,
@@ -36,23 +37,40 @@ run file = do
 
       result <- evalZ3 $ do
 
-        env1 <- buildEnv (input program ++ output program ++ getVarDeclarations (stmt program)) (wlp (stmt preprocessedProgram) (LitB True)) M.empty
 
-        pdcg <- programDCG env1 $ stmt preprocessedProgram
+        let pdcg = programDCG $ stmt preprocessedProgram
 
-        let paths = dcgToPaths pdcg
+        --liftIO $ putStrLn $ printDCG pdcg
 
-        wlpPaths <- mapM (wlpDCG . reverseDCG) paths
+        let paths = dcgToStatements pdcg
 
-        let stringpaths = map printDCG wlpPaths
-
-      -- putStrLn $ concat stringpaths
+        envPaths <- statementsToPath paths (input program ++ output program)
 
 
-        -- liftIO $ print env1
+        prunedPaths <- filterM prunePath envPaths
 
-        solveZ3DCGs wlpPaths env1
 
-      -- print result
+        liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
+        liftIO $ putStrLn (concatMap (\p -> show (wlp p) ++ "\n") envPaths)
+        -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") prunedPaths)
 
-      return $ and result
+        liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
+
+        r <- mapM validatePath prunedPaths
+
+        case r of
+          [] -> return False
+          _ -> return $ and r
+
+        -- liftIO $ putStrLn ("Paths pruned: " ++ show nPruned)
+
+        -- wlpPaths <- mapM (wlpDCG . reverseDCG) paths
+
+        -- let stringpaths = concatMap printDCG wlpPaths
+
+        -- -- liftIO $ putStrLn (stringpaths)
+
+
+        -- solveZ3DCGs wlpPaths env1
+
+      return result

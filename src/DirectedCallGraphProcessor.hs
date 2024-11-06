@@ -1,118 +1,148 @@
 module DirectedCallGraphProcessor where
 
 import Control.Monad.IO.Class (liftIO)
-import DCG (DCG (..))
-import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Program (..), Stmt (..), Type (..), VarDeclaration (..))
-import Helper (replaceAssignStmt)
+import DCG (DCG (..), printDCG)
+import qualified GCLParser.GCLDatatype as GCL
+import Helper (replaceAssignStmt, replaceAssign)
 import ProgramProcessor (wlp)
-import Types (PostCondition)
+import Types (PostCondition, Path (Path), Statement (Assume, Assign, AAssign, Decl), Env, gclToStatement)
+import Debug.Trace
 import Z3.Monad
   ( MonadZ3,
     Result (Sat, Unsat),
     assert,
     check,
-    mkNot,
+    mkNot, getModel, showModel,
   )
-import Z3Solver (Env, buildEnv, exprToZ3, getVarDeclarations)
+import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
+import Control.Monad (when)
+import Data.Map (valid)
+import GCLParser.GCLDatatype (VarDeclaration)
 
-programDCG :: (MonadZ3 z3) => Env -> Stmt -> z3 (DCG Stmt)
-programDCG env Skip = return Empty
-programDCG env stmt@(Assert _) = return $ Leaf stmt
-programDCG env stmt@(Assume _) = return $ Leaf stmt
-programDCG env stmt@(Assign _ _) = return $ Leaf stmt
-programDCG env stmt@(AAssign {}) = return $ Leaf stmt
-programDCG env (Seq Skip s2) = programDCG env s2
-programDCG env (Seq s1 Skip) = programDCG env s1
-programDCG env (Seq s1 s2) = do
-  x1 <- programDCG env s1
-  x2 <- programDCG env s2
+programDCG :: GCL.Stmt -> DCG GCL.Stmt
+programDCG GCL.Skip = Empty
+programDCG stmt@(GCL.Assert _) = Leaf (stmt)
+programDCG stmt@(GCL.Assume _) = Leaf stmt
+programDCG stmt@(GCL.Assign _ _) = Leaf stmt
+programDCG stmt@(GCL.AAssign {}) = Leaf stmt
+programDCG (GCL.Seq GCL.Skip s2) = programDCG s2
+programDCG (GCL.Seq s1 GCL.Skip) = programDCG s1
+programDCG (GCL.Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
+programDCG stmt@(GCL.IfThenElse e s1 s2) = Node (SeqNode (GCL.Assume e) (programDCG s1)) stmt (SeqNode (GCL.Assume (GCL.OpNeg e)) (programDCG s2))
+programDCG stmt@(GCL.While e s) = programDCG $ programWhile stmt 10
+programDCG stmt@(GCL.Block decls s) =  DeclNode decls $ programDCG s
 
-  return $ combineDCG x1 x2
-programDCG env stmt@(IfThenElse e s1 s2) = do
-  x1 <- programDCG env s1
-  p1 <- prunePath env x1
-  x2 <- programDCG env s2
-  p2 <- prunePath env x2
+-- Function that returns true if a path needs to be pruned
+prunePath :: (MonadZ3 z3) => Path -> z3 Bool
+prunePath (Path stmts env) = do
+  let conj = makeConjunction stmts (GCL.LitB True)
 
-  return $ Node (SeqNode (Assume e) p1) stmt (SeqNode (Assume (OpNeg e)) p2)
-programDCG env stmt@(While e s) = programDCG env (programWhile stmt 10)
-programDCG env stmt@(Block _ s) = programDCG env s
+  feasible <- validZ3 conj env
 
-prunePath :: (MonadZ3 z3) => Env -> DCG Stmt -> z3 (DCG Stmt)
-prunePath env dcg = do
-  -- Calculate WLP of path
-  wlp <- wlpDCG dcg
+  -- return $ case feasible of
+  --   -- feasible, thus keep
+  --   True -> trace (show conj ++ "  KEEP") $ True
+  --   -- infeasible, thus prune
+  --   False -> trace (show conj ++ " PRUNE") False
 
-  -- Check if path is feasible
-  feasible <- feasibleZ3 wlp env
+  return feasible
 
-  -- Return True if path is not feasible
-  -- Return False if feasible (As to not prune it)
-  if feasible 
-    then return dcg 
-    else return Empty
+-- Function that creates a conjunction of the path
+-- meaning all assumptions should be true
+makeConjunction :: [Statement] -> GCL.Expr -> GCL.Expr
+makeConjunction [] = id
+makeConjunction (Assume e : xs) = (makeConjunction xs) . GCL.BinopExpr GCL.And e 
+makeConjunction ((Assign s e): xs) = (makeConjunction xs) . replaceAssign s e
+makeConjunction ((AAssign s e1 e2) : xs) = (makeConjunction xs) . replaceAssign s (GCL.RepBy (GCL.Var s) e1 e2)
+makeConjunction (x : xs) = makeConjunction xs
 
-programWhile :: Stmt -> Int -> Stmt
-programWhile stmt@(While e s) k
-  | k == 0 = Assume (OpNeg e)
-  | k > 0 = IfThenElse e (Seq s (programWhile stmt (k - 1))) Skip
+programWhile :: GCL.Stmt -> Int -> GCL.Stmt
+programWhile stmt@(GCL.While e s) k
+  | k == 0 = GCL.Assume (GCL.OpNeg e)
+  | k > 0 = GCL.IfThenElse e (GCL.Seq s (programWhile stmt (k - 1))) GCL.Skip
 
-combineDCG :: DCG Stmt -> DCG Stmt -> DCG Stmt
+combineDCG :: DCG GCL.Stmt -> DCG GCL.Stmt -> DCG GCL.Stmt
 combineDCG (Leaf x) t2 = SeqNode x t2
 combineDCG Empty t2 = t2
 combineDCG (Node l x r) t2 = Node (combineDCG l t2) x (combineDCG r t2)
 combineDCG (SeqNode x c) t2 = SeqNode x (combineDCG c t2)
+combineDCG (DeclNode x c) t2 = DeclNode x (combineDCG c t2)
 
-dcgToPaths :: DCG a -> [DCG a]
-dcgToPaths Empty = []
-dcgToPaths (Leaf a) = [Leaf a]
-dcgToPaths (SeqNode a dcg) = [SeqNode a path | path <- dcgToPaths dcg]
-dcgToPaths (Node left a right) =
-  dcgToPaths left
-    ++ dcgToPaths right
+dcgToStatements :: DCG GCL.Stmt -> [[Statement]]
+dcgToStatements Empty = [[]]
+dcgToStatements (Leaf x) = [[gclToStatement x]]
+dcgToStatements (SeqNode x c) = map (gclToStatement x :) $ dcgToStatements c
+dcgToStatements (Node l x r) = dcgToStatements l ++ dcgToStatements r
+dcgToStatements (DeclNode decls c) = map (Decl decls :) $ dcgToStatements c
 
-wlpDCG :: (MonadZ3 z3) => DCG Stmt -> z3 (DCG PostCondition)
-wlpDCG dcg = return $ wlpDCG' (dcg, LitB True)
-  where
-    wlpDCG' :: (DCG Stmt, PostCondition) -> DCG PostCondition
-    wlpDCG' (Empty, _) = Empty
-    wlpDCG' (Leaf x, pc) = Leaf (wlp x pc)
-    wlpDCG' (SeqNode x c, pc) =
-      SeqNode pc' (wlpDCG' (c, pc'))
-      where
-        pc' = wlp x pc
-    wlpDCG' (Node l (IfThenElse e _ _) r, pc) =
-      Node
-        (wlpDCG' (l, pcLeft))
-        pc
-        (wlpDCG' (r, pcRight))
-      where
-        pcLeft = BinopExpr And e pc
-        pcRight = BinopExpr And (OpNeg e) pc
-    wlpDCG' (Node l (TryCatch e s1 s2) r, pc) =
-      Node
-        (wlpDCG' (l, pc))
-        pc
-        (wlpDCG' (r, pcError))
-      where
-        pcError = wlp (replaceAssignStmt s2 e (Var e)) pc
-    wlpDCG' (Node l x r, pc) = Node (wlpDCG' (l, pc')) pc' (wlpDCG' (r, pc'))
-      where
-        pc' = wlp x pc
+statementsToPath :: (MonadZ3 z3) => [[Statement]] -> [VarDeclaration] -> z3 [Path]
+statementsToPath [] _ = return []
+statementsToPath (p : ps) decls = do
+  env <- buildEnv p decls
+  rest <- statementsToPath ps decls
+  return $ Path p env : rest
+  
+-- dcgToPaths :: (MonadZ3 z3) => DCG Stmt -> Env -> z3 ([DCG Stmt], Int)
+-- dcgToPaths Empty env = do
+--   return ([], 0)
+-- dcgToPaths (Leaf a) env = do
+--   return ([Leaf a], 0)
+-- dcgToPaths (SeqNode a dcg) env = do
+--   (paths, prunedCount) <- dcgToPaths dcg env
+--   return ([SeqNode a path | path <- paths], prunedCount)
+-- dcgToPaths (Node left a right) env = do
+--   (lPaths, lPrunedCount) <- dcgToPaths left env
+--   (rPaths, rPrunedCount) <- dcgToPaths right env
 
-solveZ3DCGs :: (MonadZ3 z3) => [DCG PostCondition] -> Env -> z3 [Bool]
-solveZ3DCGs l env = mapM (\x ->do f <- x `feasibleZ3` env; return $ not f) l
+--   lPruned <- mapM (prunePath env) lPaths
+--   rPruned <- mapM (prunePath env) rPaths
 
-feasibleZ3 :: (MonadZ3 z3) => DCG PostCondition -> Env -> z3 Bool
-feasibleZ3 Empty env = return True
-feasibleZ3 (Node l x r) env = do
-  l' <- feasibleZ3 l env
-  r' <- feasibleZ3 r env
-  return $ l' && r'
-feasibleZ3 (SeqNode x c) env = do
-  feasibleZ3 c env
-feasibleZ3 (Leaf x) env = do
-  z3Expr <- exprToZ3 x env
+--   let (lFiltered, lNumPruned) = filterPaths lPruned
+--   let (rFiltered, rNumPruned) = filterPaths rPruned
+
+--   return (lFiltered ++ rFiltered, lNumPruned + rNumPruned + lPrunedCount + rPrunedCount)
+
+
+-- wlpDCG :: (MonadZ3 z3) => DCG Stmt -> z3 (DCG PostCondition)
+-- wlpDCG dcg = return $ wlpDCG' (dcg, LitB True)
+--   where
+--     wlpDCG' :: (DCG Stmt, PostCondition) -> DCG PostCondition
+--     wlpDCG' (Empty, _) = Empty
+--     wlpDCG' (Leaf x, pc) = Leaf (wlp x pc)
+--     wlpDCG' (SeqNode x c, pc) =
+--       SeqNode pc' (wlpDCG' (c, pc'))
+--       where
+--         pc' = wlp x pc
+--     wlpDCG' (Node l (IfThenElse e _ _) r, pc) =
+--       Node
+--         (wlpDCG' (l, pcLeft))
+--         pc
+--         (wlpDCG' (r, pcRight))
+--       where
+--         pcLeft = BinopExpr And e pc
+--         pcRight = BinopExpr And (OpNeg e) pc
+--     wlpDCG' (Node l (TryCatch e s1 s2) r, pc) =
+--       Node
+--         (wlpDCG' (l, pc))
+--         pc
+--         (wlpDCG' (r, pcError))
+--       where
+--         pcError = wlp (replaceAssignStmt s2 e (Var e)) pc
+--     wlpDCG' (Node l x r, pc) = Node (wlpDCG' (l, pc')) pc' (wlpDCG' (r, pc'))
+--       where
+--         pc' = wlp x pc
+
+-- solveZ3DCGs :: (MonadZ3 z3) => [DCG PostCondition] -> Env -> z3 [Bool]
+-- solveZ3DCGs l env = trace (show (length l)) $ mapM (\x ->do x `validZ3` env;) l
+
+validatePath :: (MonadZ3 z3) => Path -> z3 Bool
+validatePath p@(Path stmts env) = do
+  let expr = wlp p
+  validZ3 expr env
+
+validZ3 :: (MonadZ3 z3) => GCL.Expr -> Env -> z3 Bool
+validZ3 e env = do
+  z3Expr <- exprToZ3 e env
 
   z3ExprNot <- mkNot z3Expr
 
@@ -120,6 +150,16 @@ feasibleZ3 (Leaf x) env = do
   result <- check
 
   case result of
+    Sat -> return False
+    Unsat -> return True
+
+feasibleZ3 :: (MonadZ3 z3) => GCL.Expr -> Env -> z3 Bool
+feasibleZ3 e env = do
+  z3Expr <- exprToZ3 e env
+
+  assert z3Expr
+  result <- check
+
+  case result of
     Sat -> return True
     Unsat -> return False
-    _ -> return True
