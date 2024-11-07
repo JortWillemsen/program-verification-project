@@ -4,7 +4,7 @@ module ProgramProcessor where
 
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Program (..), Type (..), VarDeclaration (..))
 import Helper (replaceAssign, replaceAssignStmt)
-import Types (PostCondition, Path (Path), Statement (..))
+import Types (Path (Path), PostCondition, Statement (..))
 
 negateExpr :: Expr -> Expr
 negateExpr = OpNeg
@@ -34,11 +34,11 @@ wlp :: Path -> Expr
 wlp (Path stmts _) = wlp' stmts
   where
     wlp' [] = LitB True
-    wlp' ((Assert e):xs) = BinopExpr And e (wlp' xs)
-    wlp' ((Assume e):xs) = BinopExpr Implication e (wlp' xs)
-    wlp' ((Assign str e):xs) = replaceAssign str e (wlp' xs)
-    wlp' ((AAssign str e1 e2):xs) = replaceAssign str (RepBy (Var str) e1 e2) (wlp' xs)
-    wlp' ((Decl x):xs) = wlp' xs
+    wlp' ((Assert e) : xs) = BinopExpr And e (wlp' xs)
+    wlp' ((Assume e) : xs) = BinopExpr Implication e (wlp' xs)
+    wlp' ((Assign str e) : xs) = replaceAssign str e (wlp' xs)
+    wlp' ((AAssign str e1 e2) : xs) = replaceAssign str (RepBy (Var str) e1 e2) (wlp' xs)
+    wlp' ((Decl x) : xs) = wlp' xs
 
 -- data Stmt
 --   = Skip
@@ -53,22 +53,6 @@ wlp (Path stmts _) = wlp' stmts
 --   | Block [VarDeclaration] Stmt
 --   | TryCatch String Stmt Stmt
 --
-
---  Var                String
---     | LitI               Int
---     | LitB               Bool
---     | LitNull
---     | Parens             Expr
---     | ArrayElem          Expr   Expr
---     | OpNeg              Expr
---     | BinopExpr          BinOp  Expr   Expr
---     | Forall             String Expr
---     | Exists             String Expr
---     | SizeOf             Expr
---     | RepBy              Expr   Expr   Expr
---     | Cond               Expr   Expr   Expr
---     | NewStore           Expr
---     | Dereference        String
 
 -- data Expr
 --   = Var String

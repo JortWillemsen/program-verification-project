@@ -1,7 +1,9 @@
 module Z3Solver where
 
+import Control.Monad (foldM)
 import qualified Data.Map as M
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
+import Types (Env, Path (Path), Statement (Decl))
 import Z3.Monad
   ( AST,
     MonadZ3,
@@ -18,6 +20,7 @@ import Z3.Monad
     mkFreshBoolVar,
     mkFreshConst,
     mkFreshIntVar,
+    mkFreshVar,
     mkGe,
     mkGt,
     mkImplies,
@@ -35,10 +38,8 @@ import Z3.Monad
     mkStringSymbol,
     mkSub,
     mkTrue,
-    toApp, mkFreshVar,
+    toApp,
   )
-import Types (Path (Path), Statement (Decl), Env)
-import Control.Monad (foldM)
 
 buildEnv :: (MonadZ3 z3) => [Statement] -> [VarDeclaration] -> z3 Env
 buildEnv path decls = do
@@ -77,49 +78,49 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
       return $ M.insert str freshArray env
 
 -- Build the environment from the given expression
--- createEnv :: (MonadZ3 z3) => Env -> z3 Env
--- createEnv LitNull cEnv = return cEnv
--- createEnv (Forall str e) cEnv = case M.lookup str cEnv of
---   Just _ -> createEnv cEnv
+-- addExprToEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
+-- addExprToEnv LitNull cEnv = return cEnv
+-- addExprToEnv (Forall str e) cEnv = case M.lookup str cEnv of
+--   Just _ -> addExprToEnv e cEnv
 --   Nothing -> do
 --     freshVar <- mkFreshIntVar str
---     createEnv $ M.insert str freshVar cEnv
--- createEnv (Exists str e) cEnv = case M.lookup str cEnv of
---   Just _ -> createEnv cEnv
+--     addExprToEnv e $ M.insert str freshVar cEnv
+-- addExprToEnv (Exists str e) cEnv = case M.lookup str cEnv of
+--   Just _ -> addExprToEnv e cEnv
 --   Nothing -> do
 --     freshVar <- mkFreshIntVar str
---     createEnv $ M.insert str freshVar cEnv
--- createEnv (Var n) cEnv = case M.lookup n cEnv of
+--     addExprToEnv e $ M.insert str freshVar cEnv
+-- addExprToEnv (Var n) cEnv = case M.lookup n cEnv of
 --   Just _ -> return cEnv
 --   Nothing -> do
 --     freshVar <- mkFreshIntVar n
 --     return $ M.insert n freshVar cEnv
--- createEnv (ArrayElem e1 i) cEnv = do
---   env' <- createEnv e1 cEnv
---   createEnv i env'
--- createEnv (Parens e) cEnv = createEnv cEnv
--- createEnv (OpNeg e) cEnv = createEnv cEnv
--- createEnv (BinopExpr _ e1 e2) cEnv = do
---   env1 <- createEnv e1 cEnv
---   createEnv e2 env1
--- createEnv (RepBy arr i v) cEnv = do
---   env1 <- createEnv arr cEnv
---   env2 <- createEnv i env1
---   createEnv v env2
--- createEnv (Cond g e1 e2) cEnv = do
---   env1 <- createEnv g cEnv
---   env2 <- createEnv e1 env1
---   createEnv e2 env2
--- createEnv (SizeOf e) cEnv = createEnv cEnv
--- createEnv (NewStore e) cEnv = createEnv cEnv
--- createEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as is
--- createEnv (LitI _) cEnv = return cEnv
--- createEnv (LitB _) cEnv = return cEnv
+-- addExprToEnv (ArrayElem e1 i) cEnv = do
+--   env' <- addExprToEnv e1 cEnv
+--   addExprToEnv i env'
+-- addExprToEnv (Parens e) cEnv = addExprToEnv e cEnv
+-- addExprToEnv (OpNeg e) cEnv = addExprToEnv e cEnv
+-- addExprToEnv (BinopExpr _ e1 e2) cEnv = do
+--   env1 <- addExprToEnv e1 cEnv
+--   addExprToEnv e2 env1
+-- addExprToEnv (RepBy arr i v) cEnv = do
+--   env1 <- addExprToEnv arr cEnv
+--   env2 <- addExprToEnv i env1
+--   addExprToEnv v env2
+-- addExprToEnv (Cond g e1 e2) cEnv = do
+--   env1 <- addExprToEnv g cEnv
+--   env2 <- addExprToEnv e1 env1
+--   addExprToEnv e2 env2
+-- addExprToEnv (SizeOf e) cEnv = addExprToEnv e cEnv
+-- addExprToEnv (NewStore e) cEnv = addExprToEnv e cEnv
+-- addExprToEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as is
+-- addExprToEnv (LitI _) cEnv = return cEnv
+-- addExprToEnv (LitB _) cEnv = return cEnv
 
 getVarDeclarations :: [Statement] -> [VarDeclaration]
 getVarDeclarations [] = []
-getVarDeclarations ((Decl decls):xs) = decls ++ getVarDeclarations xs
-getVarDeclarations (x:xs) = getVarDeclarations xs
+getVarDeclarations ((Decl decls) : xs) = decls ++ getVarDeclarations xs
+getVarDeclarations (x : xs) = getVarDeclarations xs
 
 exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
 exprToZ3 LitNull env = undefined -- optional

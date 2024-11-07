@@ -1,15 +1,17 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Types where
 
-import qualified GCLParser.GCLDatatype as GCL
-import Z3.Base (AST)
 import Data.Map as M
 import GCLParser.GCLDatatype (VarDeclaration)
+import qualified GCLParser.GCLDatatype as GCL
+import Z3.Base (AST)
+
 type PostCondition = GCL.Expr
 
 type Env = M.Map String AST
 
-
-data Statement 
+data Statement
   = Assert GCL.Expr
   | Assume GCL.Expr
   | Assign String GCL.Expr
@@ -17,6 +19,7 @@ data Statement
   | Decl [GCL.VarDeclaration]
 
 instance Show Statement where
+  show :: Statement -> String
   show (Assert e) = "assert " ++ show e
   show (Assume e) = "assume " ++ show e
   show (Assign str e) = str ++ " := " ++ show e
@@ -26,8 +29,8 @@ instance Show Statement where
 data Path = Path [Statement] Env
 
 instance Show Path where
-  show (Path stmts env) = "Path: \n" ++ "   " ++ show stmts ++ "\n   " ++ show env ++ "\n   " ++"\n\n"
-
+  show :: Path -> String
+  show (Path stmts env) = "Path: \n" ++ "   " ++ show stmts ++ "\n   " ++ show env ++ "\n   " ++ "\n\n"
 
 gclToStatement :: GCL.Stmt -> Statement
 gclToStatement (GCL.Assert e) = Assert e
