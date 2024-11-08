@@ -32,18 +32,15 @@ programDCG stmt@(GCL.IfThenElse e s1 s2) = Node (SeqNode (GCL.Assume e) (program
 programDCG stmt@(GCL.While e s) = programDCG $ programWhile stmt 10
 programDCG stmt@(GCL.Block decls s) =  DeclNode decls $ programDCG s
 
--- Function that returns true if a path needs to be pruned
+-- Function that returns true if a path does not need to be pruned
 prunePath :: (MonadZ3 z3) => Path -> z3 Bool
 prunePath (Path stmts env) = do
-  if (length stmts < 1000) 
-    then return True 
+  if length stmts < 20
+    then return True
   else do
-
     let conj = makeConjunction stmts (GCL.LitB True)
-    -- liftIO $ putStrLn $ "Conjunction: " ++ show conj
 
     feasible <- validZ3 conj env
-    -- liftIO $ putStrLn $ "Feasible: " ++ show feasible
 
     return feasible
 
@@ -51,14 +48,14 @@ prunePath (Path stmts env) = do
 -- meaning all assumptions should be true
 makeConjunction :: [Statement] -> GCL.Expr -> GCL.Expr
 makeConjunction [] = id
-makeConjunction (Assume e : xs) = (makeConjunction xs) . GCL.BinopExpr GCL.And e 
-makeConjunction ((Assign s e): xs) = (makeConjunction xs) . replaceAssign s e
-makeConjunction ((AAssign s e1 e2) : xs) = (makeConjunction xs) . replaceAssign s (GCL.RepBy (GCL.Var s) e1 e2)
+makeConjunction (Assume e : xs) = makeConjunction xs . GCL.BinopExpr GCL.And e
+makeConjunction ((Assign s e): xs) = makeConjunction xs . replaceAssign s e
+makeConjunction ((AAssign s e1 e2) : xs) = makeConjunction xs . replaceAssign s (GCL.RepBy (GCL.Var s) e1 e2)
 makeConjunction (x : xs) = makeConjunction xs
 
 programWhile :: GCL.Stmt -> Int -> GCL.Stmt
 programWhile stmt@(GCL.While e s) k
-  | k == 0 = GCL.Assume (GCL.OpNeg e)
+  | k <= 0 = GCL.Assume (GCL.OpNeg e)
   | k > 0 = GCL.IfThenElse e (GCL.Seq s (programWhile stmt (k - 1))) GCL.Skip
 
 combineDCG :: DCG GCL.Stmt -> DCG GCL.Stmt -> DCG GCL.Stmt
@@ -68,12 +65,31 @@ combineDCG (Node l x r) t2 = Node (combineDCG l t2) x (combineDCG r t2)
 combineDCG (SeqNode x c) t2 = SeqNode x (combineDCG c t2)
 combineDCG (DeclNode x c) t2 = DeclNode x (combineDCG c t2)
 
-dcgToStatements :: DCG GCL.Stmt -> [[Statement]]
-dcgToStatements Empty = [[]]
-dcgToStatements (Leaf x) = [[gclToStatement x]]
-dcgToStatements (SeqNode x c) = map (gclToStatement x :) $ dcgToStatements c
-dcgToStatements (Node l x r) = dcgToStatements l ++ dcgToStatements r
-dcgToStatements (DeclNode decls c) = map (Decl decls :) $ dcgToStatements c
+dcgToStatements :: (MonadZ3 z3) => DCG GCL.Stmt -> [VarDeclaration] -> [Statement] -> z3 [Path]
+dcgToStatements Empty decls currentPath = do
+  env <- buildEnv currentPath decls
+  return [Path currentPath env]
+
+dcgToStatements (Leaf x) decls currentPath = do
+  env <- buildEnv currentPath decls
+  return [Path (currentPath ++ [gclToStatement x]) env]
+
+dcgToStatements (SeqNode x c) decls currentPath = do
+  let newPath = currentPath ++ [gclToStatement x]
+  dcgToStatements c decls newPath
+
+dcgToStatements (Node l x r) decls currentPath = do
+  env <- buildEnv currentPath decls
+  feasible <- prunePath (Path currentPath env)
+  if feasible
+    then do
+      leftPaths <- dcgToStatements l decls currentPath
+      rightPaths <- dcgToStatements r decls currentPath
+      return $ leftPaths ++ rightPaths
+    else return []
+dcgToStatements (DeclNode decls c) decls' currentPath = do
+  let newPath = currentPath
+  dcgToStatements c (decls' ++ decls) newPath 
 
 statementsToPath :: (MonadZ3 z3) => [[Statement]] -> [VarDeclaration] -> z3 [Path]
 statementsToPath [] _ = return []
@@ -81,7 +97,7 @@ statementsToPath (p : ps) decls = do
   env <- buildEnv p decls
   rest <- statementsToPath ps decls
   return $ Path p env : rest
-  
+
 -- dcgToPaths :: (MonadZ3 z3) => DCG Stmt -> Env -> z3 ([DCG Stmt], Int)
 -- dcgToPaths Empty env = do
 --   return ([], 0)
@@ -139,6 +155,12 @@ validatePath :: (MonadZ3 z3) => Path -> z3 Bool
 validatePath p@(Path stmts env) = do
   let expr = wlp p
   validZ3 expr env
+
+feasiblePath :: (MonadZ3 z3) => Path -> z3 Bool
+feasiblePath p@(Path stmts env) = do
+  let expr  = makeConjunction stmts (GCL.LitB True)
+
+  feasibleZ3 expr env
 
 validZ3 :: (MonadZ3 z3) => GCL.Expr -> Env -> z3 Bool
 validZ3 e env = do

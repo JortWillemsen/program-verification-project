@@ -3,7 +3,7 @@ module WLPVerifier where
 import Control.Monad.Cont (MonadIO (liftIO), filterM)
 import DCG
 import qualified Data.Map as M
-import DirectedCallGraphProcessor (dcgToStatements, programDCG, prunePath, statementsToPath, validatePath)
+import DirectedCallGraphProcessor (dcgToStatements, programDCG, prunePath, statementsToPath, validatePath, feasiblePath)
 import GCLParser.GCLDatatype (Expr (..), PrimitiveType (PTInt), Program (input, output, stmt), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
 import GCLParser.Parser (parseGCLfile)
 import PreProcessor (makeUniqueForall, preprocess)
@@ -13,6 +13,7 @@ import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
 import Z3Solver (buildEnv, exprToZ3)
 import Prelude
+import Types (Path(Path))
 
 -- | Runs the entire verification process on a given GCL file.
 -- Takes a file path as input and returns 'True' if the program is valid,
@@ -40,22 +41,24 @@ run file = do
 
         -- liftIO $ putStrLn $ printDCG pdcg
 
-        let paths = dcgToStatements pdcg
+        paths <- dcgToStatements pdcg (input program ++ output program ++ getVarDeclarationsProgram (stmt preprocessedProgram)) []
 
-        envPaths <- statementsToPath paths (input program ++ output program ++ getVarDeclarationsProgram (stmt preprocessedProgram))
-
+        let pathLengths = map (\(Path s _) -> length s) paths
         -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
-
-        prunedPaths <- filterM prunePath envPaths
-
-        r <- mapM validatePath prunedPaths
+        liftIO $ putStrLn $ "Max path length: " ++ show (maximum pathLengths) ++ "\n"
+        -- prunedPaths <- filterM prunePath envPaths
+        
+        r <- mapM validatePath paths
+        
+        -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") prunedPaths)
+        --liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
 
         case r of
           [] -> return False
           _ -> return $ and r
 
 -- liftIO $ putStrLn (concatMap (\p -> show (wlp p) ++ "\n") envPaths)
--- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") prunedPaths)
+        
 
 -- liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
 
