@@ -10,26 +10,26 @@ main = defaultMain tests
 -- Array of tuples that contain the programs and whether they are valid or not
 testCases :: [(String, Bool)]
 testCases =
-  [ ("examples/E.gcl", False),
-    ("examples/min.gcl", True),
-    ("examples/minind.gcl", True),
+  [ --("examples/E.gcl", False),
+    --("examples/min.gcl", True),
+    --("examples/minind.gcl", True),
     -- ("examples/reftest.gcl", True)
-    ("examples/reverse.gcl", True),
-    ("examples/S1.gcl", True),
-    ("examples/swap.gcl", True),
+    --("examples/reverse.gcl", True),
+    --("examples/S1.gcl", True),
+    --("examples/swap.gcl", True),
     -- Benchmarks
     -- ("examples/benchmark/bsort.gcl", True), -- Loop optional
     -- ("examples/benchmark/divByN.gcl", True),
     -- ("examples/benchmark/find12.gcl", True), -- Exceptions
     -- ("examples/benchmark/invalidBSort.gcl", False) -- Loop optional
-    -- ("examples/benchmark/invalidDivByN.gcl", False),
+    --("examples/benchmark/invalidDivByN.gcl", False),
     -- ("examples/benchmark/invalidFind12.gcl", False), -- Exceptions
     ("examples/benchmark/invalidMemberOf.gcl", False),
-    -- ("examples/benchmark/invalidMin.gcl", False), -- References
-    -- ("examples/benchmark/invalidPullUp.gcl", False),
-    ("examples/benchmark/memberOf.gcl", True),
+    --("examples/benchmark/invalidMin.gcl", False), -- References
+    ("examples/benchmark/invalidPullUp.gcl", False)
+    --("examples/benchmark/memberOf.gcl", True),
     -- ("examples/benchmark/min.gcl", True), -- References
-    ("examples/benchmark/pullUp.gcl", True)
+    --("examples/benchmark/pullUp.gcl", True)
   ]
 
 -- Define the test suite

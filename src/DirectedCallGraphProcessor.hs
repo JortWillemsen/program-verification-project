@@ -35,7 +35,7 @@ programDCG stmt@(GCL.Block decls s) =  DeclNode decls $ programDCG s
 -- Function that returns true if a path does not need to be pruned
 prunePath :: (MonadZ3 z3) => Path -> z3 Bool
 prunePath (Path stmts env) = do
-  if length stmts < 20
+  if length stmts < 45
     then return True
   else do
     let conj = makeConjunction stmts (GCL.LitB True)
@@ -174,6 +174,7 @@ validZ3 e env = do
   case result of
     Sat -> return False
     Unsat -> return True
+    _ -> return False
 
 feasibleZ3 :: (MonadZ3 z3) => GCL.Expr -> Env -> z3 Bool
 feasibleZ3 e env = do

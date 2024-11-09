@@ -68,14 +68,22 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
       range <- mkIntSort
       arraySort <- mkArraySort domain range
       freshArray <- mkFreshConst str arraySort
-      return $ M.insert str freshArray env
+
+      let sizeName = '#' : str
+      sizeInt <- mkFreshIntVar sizeName
+
+      return $ M.insert str freshArray $ M.insert sizeName sizeInt env
     -- Create a boolean array
     PTBool -> do
       domain <- mkIntSort
       range <- mkBoolSort
+
+      let sizeName = '#' : str
+      sizeInt <- mkFreshIntVar sizeName
+
       arraySort <- mkArraySort domain range
       freshArray <- mkFreshConst str arraySort
-      return $ M.insert str freshArray env
+      return $ M.insert str freshArray $ M.insert sizeName sizeInt env
 
 -- Build the environment from the given expression
 -- addExprToEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
@@ -145,7 +153,12 @@ exprToZ3 (Exists str e) env = do
   app <- toApp qVar
   z3Expr <- exprToZ3 e env
   mkExistsConst [] [app] z3Expr -- Faulty
-exprToZ3 (SizeOf e) env = mkIntNum $ sizeOfExpr e
+exprToZ3 (SizeOf e) env = do
+  let str = '#' : findStr e
+  case M.lookup str env of
+    Just z3Var -> return z3Var -- Return existing Z3 variable if found
+    Nothing -> do
+      error $ "dit hoort niet te gebeuren #" ++ show str
 exprToZ3 (RepBy arr i v) env = do
   arrZ3 <- exprToZ3 arr env
   indexZ3 <- exprToZ3 i env
@@ -184,19 +197,8 @@ exprToZ3 (BinopExpr op e1 e2) env = do
     Implication -> mkImplies z3e1 z3e2
     Alias -> undefined
 
-sizeOfExpr :: Expr -> Int
-sizeOfExpr (Var _) = 1
-sizeOfExpr (LitI _) = 1
-sizeOfExpr (LitB _) = 1
-sizeOfExpr LitNull = 1
-sizeOfExpr (Parens e) = sizeOfExpr e
-sizeOfExpr (ArrayElem e1 e2) = 1 + sizeOfExpr e1 + sizeOfExpr e2
-sizeOfExpr (OpNeg e) = 1 + sizeOfExpr e
-sizeOfExpr (BinopExpr _ e1 e2) = 1 + sizeOfExpr e1 + sizeOfExpr e2
-sizeOfExpr (Forall _ e) = 1 + sizeOfExpr e
-sizeOfExpr (Exists _ e) = 1 + sizeOfExpr e
-sizeOfExpr (SizeOf e) = 1 + sizeOfExpr e
-sizeOfExpr (RepBy e1 e2 e3) = 1 + sizeOfExpr e1 + sizeOfExpr e2 + sizeOfExpr e3
-sizeOfExpr (Cond e1 e2 e3) = 1 + sizeOfExpr e1 + sizeOfExpr e2 + sizeOfExpr e3
-sizeOfExpr (NewStore e) = 1 + sizeOfExpr e
-sizeOfExpr (Dereference _) = 1
+findStr :: Expr -> String
+findStr (Var n) = n
+findStr (Parens e) = findStr e
+findStr (OpNeg e) = findStr e
+findStr (RepBy e _ _) = findStr e

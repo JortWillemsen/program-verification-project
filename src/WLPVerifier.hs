@@ -45,8 +45,9 @@ run file = do
 
         let pathLengths = map (\(Path s _) -> length s) paths
         -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
-        liftIO $ putStrLn $ "Max path length: " ++ show (maximum pathLengths) ++ "\n"
+        liftIO $ putStr $ "Max path length: " ++ show (maximum pathLengths)
         -- prunedPaths <- filterM prunePath envPaths
+        liftIO $ putStr $ ", Total paths: " ++ show (length paths)
         
         r <- mapM validatePath paths
         

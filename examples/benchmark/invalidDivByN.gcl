@@ -7,7 +7,7 @@
 
 // N is an experiment parameter; replace it with a concrete value.
 
-divByN(x:int | divisible:bool) {
+divByN(x:int, N:int | divisible:bool) {
   // N is an experiment parameter
   assume x>1 ;
   var k:int {
