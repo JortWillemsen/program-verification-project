@@ -7,6 +7,25 @@ import Types (PostCondition)
 -- | string: variable name
 -- | expr: thing that goes in the variable
 -- |
+
+
+replace :: String -> Expr -> Expr -> Expr
+replace n e1 (Var n')
+  | n == n' = e1
+  | otherwise = Var n'
+replace n e1 (Parens e2) = Parens (replace n e1 e2)
+replace n e1 (ArrayElem e2 e3) = ArrayElem (replace n e1 e2) (replace n e1 e3)
+replace n e1 (OpNeg e2) = OpNeg (replace n e1 e2)
+replace n e1 (BinopExpr op e2 e3) = BinopExpr op (replace n e1 e2) (replace n e1 e3)
+replace n e1 (Forall s e2) = Forall s (replace n e1 e2)
+replace n e1 (Exists s e2) = Exists s (replace n e1 e2)
+replace n e1 (SizeOf e2) = SizeOf (replace n e1 e2)
+replace n e1 (RepBy e2 e3 e4) = RepBy (replace n e1 e2) (replace n e1 e3) (replace n e1 e4)
+replace n e1 (Cond e2 e3 e4) = Cond (replace n e1 e2) (replace n e1 e3) (replace n e1 e4)
+replace n e1 (NewStore e2) = NewStore (replace n e1 e2)
+replace n e1 e2 = e2
+
+
 replaceAssign :: String -> Expr -> PostCondition -> PostCondition
 replaceAssign  str e (Var curStr)
   | curStr == str = e
@@ -21,24 +40,3 @@ replaceAssign str e (RepBy e1 e2 e3) = RepBy (replaceAssign str e e1) (replaceAs
 replaceAssign str e (Cond e1 e2 e3) = Cond (replaceAssign str e e1) (replaceAssign str e e2) (replaceAssign str e e3)
 replaceAssign str e (NewStore e1) = NewStore (replaceAssign str e e1)
 replaceAssign  _ _ other = other
-
-replaceAssignStmt :: Stmt -> String -> Expr -> Stmt
-replaceAssignStmt Skip _ _ = Skip
-replaceAssignStmt (Assert e) str expr = Assert (replaceAssign str expr e)
-replaceAssignStmt (Assume e) str expr = Assume (replaceAssign str expr e)
-replaceAssignStmt (Assign var e) str expr =
-  Assign var (replaceAssign str expr e)
-replaceAssignStmt (AAssign arrName indexExpr valueExpr) str expr =
-  AAssign arrName (replaceAssign str expr indexExpr) (replaceAssign str expr valueExpr)
-replaceAssignStmt (DrefAssign var e) str expr =
-  DrefAssign var (replaceAssign str expr e)
-replaceAssignStmt (Seq s1 s2) str expr =
-  Seq (replaceAssignStmt s1 str expr) (replaceAssignStmt s2 str expr)
-replaceAssignStmt (IfThenElse cond s1 s2) str expr =
-  IfThenElse (replaceAssign str expr cond) (replaceAssignStmt s1 str expr) (replaceAssignStmt s2 str expr)
-replaceAssignStmt (While cond body) str expr =
-  While (replaceAssign str expr cond) (replaceAssignStmt body str expr)
-replaceAssignStmt (Block decls body) str expr =
-  Block decls (replaceAssignStmt body str expr)
-replaceAssignStmt (TryCatch e s1 s2) str expr =
-  TryCatch e (replaceAssignStmt s1 str expr) (replaceAssignStmt s2 str expr)

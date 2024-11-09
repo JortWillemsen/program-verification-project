@@ -8,7 +8,8 @@
 
 // N is an experiment parameter; replace it with a concrete value.
 
-pullUp(step:int , a:[]int, N:int | b:[]int) {
+pullUp(step:int , a:[]int, N: int | b:[]int) {
+   N := 4;
    // N is an experiment parameter
    assume #a>=2 && #a=N && step>0 ;
 

@@ -3,8 +3,8 @@ module DirectedCallGraphProcessor where
 import Control.Monad.IO.Class (liftIO)
 import DCG (DCG (..), printDCG)
 import qualified GCLParser.GCLDatatype as GCL
-import Helper (replaceAssignStmt, replaceAssign)
-import ProgramProcessor (wlp)
+import Helper (replaceAssign, replace)
+import ProgramProcessor (wlp, simplify)
 import Types (PostCondition, Path (Path), Statement (Assume, Assign, AAssign, Decl), Env, gclToStatement)
 import Debug.Trace
 import Z3.Monad
@@ -14,7 +14,7 @@ import Z3.Monad
     check,
     mkNot, getModel, showModel,
   )
-import Z3Solver (buildEnv, exprToZ3, getVarDeclarations)
+import Z3Solver (buildEnv, getVarDeclarations, exprToZ3)
 import Control.Monad (when)
 import Data.Map (valid)
 import GCLParser.GCLDatatype (VarDeclaration)
@@ -29,28 +29,28 @@ programDCG (GCL.Seq GCL.Skip s2) = programDCG s2
 programDCG (GCL.Seq s1 GCL.Skip) = programDCG s1
 programDCG (GCL.Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
 programDCG stmt@(GCL.IfThenElse e s1 s2) = Node (SeqNode (GCL.Assume e) (programDCG s1)) stmt (SeqNode (GCL.Assume (GCL.OpNeg e)) (programDCG s2))
-programDCG stmt@(GCL.While e s) = programDCG $ programWhile stmt 10
+programDCG stmt@(GCL.While e s) = programDCG $ programWhile stmt 20
 programDCG stmt@(GCL.Block decls s) =  DeclNode decls $ programDCG s
 
 -- Function that returns true if a path does not need to be pruned
 prunePath :: (MonadZ3 z3) => Path -> z3 Bool
-prunePath (Path stmts env) = do
-  if length stmts < 45
-    then return True
-  else do
-    let conj = makeConjunction stmts (GCL.LitB True)
+prunePath (Path stmts env) =
+  do
+    let conj = simplify $ makeConjunction (reverse stmts) (GCL.LitB True)
 
-    feasible <- validZ3 conj env
-
+    feasible <- feasibleZ3 conj env
+    
+    --liftIO (putStrLn $ if (feasible) then "PRUNING" ++ show conj else "")
     return feasible
+      
 
 -- Function that creates a conjunction of the path
 -- meaning all assumptions should be true
 makeConjunction :: [Statement] -> GCL.Expr -> GCL.Expr
 makeConjunction [] = id
 makeConjunction (Assume e : xs) = makeConjunction xs . GCL.BinopExpr GCL.And e
-makeConjunction ((Assign s e): xs) = makeConjunction xs . replaceAssign s e
-makeConjunction ((AAssign s e1 e2) : xs) = makeConjunction xs . replaceAssign s (GCL.RepBy (GCL.Var s) e1 e2)
+makeConjunction ((Assign s e): xs) = makeConjunction xs . replace s e
+makeConjunction ((AAssign s e1 e2) : xs) = makeConjunction xs . replace s (GCL.RepBy (GCL.Var s) e1 e2)
 makeConjunction (x : xs) = makeConjunction xs
 
 programWhile :: GCL.Stmt -> Int -> GCL.Stmt
@@ -72,21 +72,31 @@ dcgToStatements Empty decls currentPath = do
 
 dcgToStatements (Leaf x) decls currentPath = do
   env <- buildEnv currentPath decls
+  liftIO $ putStrLn $ "found complete path: " ++ show (currentPath ++ [gclToStatement x])
   return [Path (currentPath ++ [gclToStatement x]) env]
+
+dcgToStatements (SeqNode x@(GCL.Assume _) c) decls currentPath = do
+  let newPath = currentPath ++ [gclToStatement x]
+  env <- buildEnv newPath decls
+  liftIO $ putStr $ "found assume: " ++ show (makeConjunction (reverse newPath) (GCL.LitB True))
+  feasible <- prunePath (Path newPath env)
+  if feasible
+    then 
+      do 
+        liftIO $ putStrLn ""
+        dcgToStatements c decls newPath
+    else do 
+      liftIO $ putStrLn (" PRUNING")
+      return []
 
 dcgToStatements (SeqNode x c) decls currentPath = do
   let newPath = currentPath ++ [gclToStatement x]
   dcgToStatements c decls newPath
 
 dcgToStatements (Node l x r) decls currentPath = do
-  env <- buildEnv currentPath decls
-  feasible <- prunePath (Path currentPath env)
-  if feasible
-    then do
       leftPaths <- dcgToStatements l decls currentPath
       rightPaths <- dcgToStatements r decls currentPath
       return $ leftPaths ++ rightPaths
-    else return []
 dcgToStatements (DeclNode decls c) decls' currentPath = do
   let newPath = currentPath
   dcgToStatements c (decls' ++ decls) newPath 
@@ -158,7 +168,7 @@ validatePath p@(Path stmts env) = do
 
 feasiblePath :: (MonadZ3 z3) => Path -> z3 Bool
 feasiblePath p@(Path stmts env) = do
-  let expr  = makeConjunction stmts (GCL.LitB True)
+  let expr  = makeConjunction (reverse stmts) (GCL.LitB True)
 
   feasibleZ3 expr env
 
@@ -173,8 +183,8 @@ validZ3 e env = do
 
   case result of
     Sat -> return False
-    Unsat -> return True
-    _ -> return False
+    Unsat -> do liftIO $ putStrLn (show e); return True
+    _ -> error "Result is weird (validity)"
 
 feasibleZ3 :: (MonadZ3 z3) => GCL.Expr -> Env -> z3 Bool
 feasibleZ3 e env = do
@@ -186,3 +196,4 @@ feasibleZ3 e env = do
   case result of
     Sat -> return True
     Unsat -> return False
+    _ -> error "Result is weird (feasible)"

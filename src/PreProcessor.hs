@@ -6,10 +6,10 @@ import GCLParser.GCLDatatype (BinOp (..), Expr (..), Program (..), Stmt (..))
 preprocess :: Program -> Bool -> Bool -> Bool -> Program
 preprocess program fold removeUnreach simplify =
   let stmt' = stmt program
-      stmt''' = if fold then foldConstantsInStmt stmt' else stmt'
-      stmt'''' = if removeUnreach then removeUnreachable stmt''' else stmt'''
-      stmt''''' = if simplify then simplifyStmt stmt'''' else stmt''''
-   in program {stmt = stmt'''''}
+      -- stmt''' = if fold then foldConstantsInStmt stmt' else stmt'
+      -- stmt'''' = if removeUnreach then removeUnreachable stmt''' else stmt'''
+      -- stmt''''' = if simplify then simplifyStmt stmt'''' else stmt''''
+   in program {stmt = stmt'}
 
 -- Normalize expressions within the program
 simplifyExpr :: Expr -> Expr

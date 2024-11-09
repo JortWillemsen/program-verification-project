@@ -10,7 +10,7 @@ import GCLParser.Parser
 import PreProcessor
 import Z3.Base
 import Z3.Monad (Z3, assert, check, evalZ3)
-import Z3Solver (buildEnv, exprToZ3)
+import Z3Solver (buildEnv)
 
 -- Array of programs to benchmark
 benchmarkCases :: [FilePath]
@@ -68,4 +68,4 @@ setupZ3Env :: Expr -> [VarDeclaration] -> Z3 AST
 setupZ3Env processedWlp decls = do
   let negatedWlp = negateExpr processedWlp
   env <- buildEnv decls processedWlp M.empty -- Build the Z3 environment
-  exprToZ3 negatedWlp env -- Convert the WLP to Z3 expression
+  makeAst env negatedWlp -- Convert the WLP to Z3 expression

@@ -10,8 +10,8 @@ import PreProcessor (makeUniqueForall, preprocess)
 import ProgramProcessor (negateExpr, wlp)
 import Text.ParserCombinators.ReadP (string)
 import Z3.Base (Result (Sat, Unsat))
-import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3)
-import Z3Solver (buildEnv, exprToZ3)
+import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3, MonadZ3)
+import Z3Solver (buildEnv)
 import Prelude
 import Types (Path(Path))
 
@@ -45,13 +45,15 @@ run file = do
 
         let pathLengths = map (\(Path s _) -> length s) paths
         -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
-        liftIO $ putStr $ "Max path length: " ++ show (maximum pathLengths)
+        --liftIO $ putStr $ "Max path length: " ++ show (maximum pathLengths)
         -- prunedPaths <- filterM prunePath envPaths
         liftIO $ putStr $ ", Total paths: " ++ show (length paths)
         
-        r <- mapM validatePath paths
+        feasiblePaths <- filterM feasiblePath paths
+
+        r <- mapM validatePath feasiblePaths
         
-        -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") prunedPaths)
+        liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") r)
         --liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
 
         case r of
@@ -92,3 +94,12 @@ getVarsDeclarationsExpr (Forall str e) = VarDeclaration str (PType PTInt) : getV
 getVarsDeclarationsExpr (Exists str e) = VarDeclaration str (PType PTInt) : getVarsDeclarationsExpr e
 getVarsDeclarationsExpr (BinopExpr _ e1 e2) = getVarsDeclarationsExpr e1 ++ getVarsDeclarationsExpr e2
 getVarsDeclarationsExpr _ = []
+
+validityCheck :: (MonadZ3 z3) => [Path] -> z3 Bool
+validityCheck (p:ps) = do
+  valid <- validatePath p
+
+  if (valid)
+    then validityCheck ps
+    else error $ "Found invalid path: \n" ++ show (wlp p) ++ "\n Exiting verifier"
+validityCheck [] = return True

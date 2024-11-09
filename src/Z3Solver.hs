@@ -1,7 +1,7 @@
 module Z3Solver where
 
 import Control.Monad (foldM)
-import qualified Data.Map as M
+import Data.Map as M
 import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
 import Types (Env, Path (Path), Statement (Decl))
 import Z3.Monad
@@ -38,13 +38,14 @@ import Z3.Monad
     mkStringSymbol,
     mkSub,
     mkTrue,
-    toApp,
+    toApp, mkBool, mkIntVar, mkExists,
   )
+import Data.Map (insert)
 
 buildEnv :: (MonadZ3 z3) => [Statement] -> [VarDeclaration] -> z3 Env
 buildEnv path decls = do
   let declarations = decls ++ getVarDeclarations path
-  foldM (flip addDeclToEnv) M.empty declarations
+  foldM (flip addDeclToEnv) empty declarations
 
 -- Add a single variable declaration to the environment
 addDeclToEnv :: (MonadZ3 z3) => VarDeclaration -> Env -> z3 Env
@@ -53,11 +54,11 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
     -- Create an integer variable
     PTInt -> do
       freshInt <- mkFreshIntVar str
-      return $ M.insert str freshInt env
+      return $ insert str freshInt env
     -- Create a boolean variable
     PTBool -> do
       freshBool <- mkFreshBoolVar str
-      return $ M.insert str freshBool env
+      return $ insert str freshBool env
   -- Handle reference types here if needed
   RefType -> undefined
   -- Handle array types
@@ -72,7 +73,7 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
       let sizeName = '#' : str
       sizeInt <- mkFreshIntVar sizeName
 
-      return $ M.insert str freshArray $ M.insert sizeName sizeInt env
+      return $ insert str freshArray $ insert sizeName sizeInt env
     -- Create a boolean array
     PTBool -> do
       domain <- mkIntSort
@@ -83,7 +84,7 @@ addDeclToEnv (VarDeclaration str typ) env = case typ of
 
       arraySort <- mkArraySort domain range
       freshArray <- mkFreshConst str arraySort
-      return $ M.insert str freshArray $ M.insert sizeName sizeInt env
+      return $ insert str freshArray $ insert sizeName sizeInt env
 
 -- Build the environment from the given expression
 -- addExprToEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
@@ -202,3 +203,18 @@ findStr (Var n) = n
 findStr (Parens e) = findStr e
 findStr (OpNeg e) = findStr e
 findStr (RepBy e _ _) = findStr e
+
+makeBinop :: (MonadZ3 z3) => BinOp -> AST -> AST -> z3 AST
+makeBinop And e1 e2 = mkAnd [e1, e2]
+makeBinop Or e1 e2 = mkOr [e1, e2]
+makeBinop Implication e1 e2 = mkImplies e1 e2
+makeBinop LessThan e1 e2 = mkLt e1 e2
+makeBinop LessThanEqual e1 e2 = mkLe e1 e2
+makeBinop GreaterThan e1 e2 = mkGt e1 e2
+makeBinop GreaterThanEqual e1 e2 = mkGe e1 e2
+makeBinop Equal e1 e2 = mkEq e1 e2
+makeBinop Minus e1 e2 = mkSub [e1, e2]
+makeBinop Plus e1 e2 = mkAdd [e1, e2]
+makeBinop Multiply e1 e2 = mkMul [e1, e2]
+makeBinop Divide e1 e2 = mkDiv e1 e2
+makeBinop Alias e1 e2 = undefined -- TODO
