@@ -1,22 +1,23 @@
 module Main where
+
+import Control.Monad.Cont (MonadIO (liftIO), filterM, when)
+import GCLHelper (getVarDeclarationsProgram, makeUnique, replaceExperimentParam)
+import GCLParser.GCLDatatype (Program (..))
 import GCLParser.Parser (parseGCLfile)
 import PathGenerator (dcgToPaths, programToDCG)
-import GCLHelper (makeUnique, replaceExperimentParam, getVarDeclarationsProgram)
-import Types (Options(..), Path (Path))
-import GCLParser.GCLDatatype (Program(..))
-import Control.Monad.Cont (MonadIO(liftIO), when, filterM)
-import Z3Solver (buildEnv, isValidPath, isSatisfiablePath)
+import Types (Options (..), Path (Path))
 import Z3.Monad (evalZ3)
-import WlpGenerator (conjunctive, wlp)
+import Z3Solver (buildEnv, isSatisfiablePath, isValidPath)
 
 main :: IO ()
 main = do
-  let options = Options { 
-      verbose = True
-    , k = 10
-    , n = 3
-    , pruneLen = 50
-  }
+  let options =
+        Options
+          { verbose = True,
+            k = 10,
+            n = 3,
+            pruneLen = 50
+          }
 
   isValid <- run options "examples/min.gcl"
 
@@ -29,27 +30,29 @@ run options file = do
   case result of
     Left _ -> do
       error "Failed to parse the GCL file:"
-
     Right program -> evalZ3 $ do
-        let uniqueProgram = makeUnique program
-        let replacedProgram = replaceExperimentParam uniqueProgram "N" (n options)
-        let varDeclarations = getVarDeclarationsProgram replacedProgram
-        let dcg = programToDCG (stmt replacedProgram) options
-        
-        env <- buildEnv varDeclarations
-        paths <- dcgToPaths dcg env options
+      let uniqueProgram = makeUnique program
+      let replacedProgram = replaceExperimentParam uniqueProgram "N" (n options)
+      let varDeclarations = getVarDeclarationsProgram replacedProgram
+      let dcg = programToDCG (stmt replacedProgram) options
 
-        when (verbose options) $ liftIO $ print env
-        when (verbose options) $ liftIO $ putStrLn $ concatMap (\(Path s _) -> show (conjunctive s) ++ "\n") paths
-        when (verbose options) $ liftIO $ print (length paths)
+      env <- buildEnv varDeclarations
+      paths <- dcgToPaths dcg env options
 
-        fPaths <- filterM isSatisfiablePath paths
-        --when (verbose options) $ liftIO $ print (length fPaths)
+      when (verbose options) $ liftIO $ putStrLn "Env: "
+      when (verbose options) $ liftIO $ print env
+      when (verbose options) $ liftIO $ putStrLn "Paths: "
+      when (verbose options) $ liftIO $ putStrLn $ concatMap (\(Path s _) -> show s ++ "\n") paths
 
+      -- Filter out the unfeasible paths
+      fPaths <- filterM isSatisfiablePath paths
+      
+      when (verbose options) $ liftIO $ putStrLn "Feasible Paths: "
+      when (verbose options) $ liftIO $ putStrLn $ concatMap (\(Path s _) -> show s ++ "\n") fPaths
 
-        r <- mapM isValidPath fPaths
+      -- Check if all feasible paths are valid
+      r <- mapM isValidPath fPaths
 
-        case r of
-          [] -> return False
-          _ -> return $ and r
-
+      case r of
+        [] -> return False
+        _ -> return $ and r

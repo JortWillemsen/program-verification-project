@@ -6,7 +6,6 @@ import GCLParser.GCLDatatype (Expr(..), BinOp (..), VarDeclaration (..), Type (.
 import qualified Data.Map as M
 import GCLHelper (getVarName)
 import Control.Monad (foldM)
-import Control.Monad.Cont (MonadIO(liftIO))
 import WlpGenerator (wlp, conjunctive)
 
 buildEnv :: [VarDeclaration] -> Z3 Env
@@ -65,32 +64,33 @@ exprToZ3 env (ArrayElem array index) = do
     mkSelect z3Arr z3Index
 exprToZ3 env (OpNeg e) = exprToZ3 env e >>= mkNot
 exprToZ3 env (BinopExpr op e1 e2) = do
-  e1Z3 <- isRepBy env e1
-  e2Z3 <- isRepBy env e2
+  z3e1 <- exprToZ3 env e1 
+  z3e2 <- exprToZ3 env e2 
   case op of
-    And -> mkAnd [e1Z3, e2Z3]
-    Or -> mkOr [e1Z3, e2Z3]
-    Implication -> mkImplies e1Z3 e2Z3
-    LessThan -> mkLt e1Z3 e2Z3
-    LessThanEqual -> mkLe e1Z3 e2Z3
-    GreaterThan -> mkGt e1Z3 e2Z3
-    GreaterThanEqual -> mkGe e1Z3 e2Z3
-    Equal -> mkEq e1Z3 e2Z3
-    Minus -> mkSub [e1Z3, e2Z3]
-    Plus -> mkAdd [e1Z3, e2Z3]
-    Multiply -> mkMul [e1Z3, e2Z3]
-    Divide -> mkDiv e1Z3 e2Z3
-    Alias -> mkEq e1Z3 e2Z3
-  where
-    isRepBy :: Env -> Expr -> Z3 AST
-    isRepBy env' (RepBy _ _ v) = exprToZ3 env' (updateRepBy v)
-    isRepBy env' e = exprToZ3 env' (updateRepBy e)
+    Plus -> mkAdd [z3e1, z3e2]
+    Minus -> mkSub [z3e1, z3e2]
+    Multiply -> mkMul [z3e1, z3e2]
+    Divide -> mkDiv z3e1 z3e2
+    LessThan -> mkLt z3e1 z3e2
+    LessThanEqual -> mkLe z3e1 z3e2
+    GreaterThan -> mkGt z3e1 z3e2
+    GreaterThanEqual -> mkGe z3e1 z3e2
+    Equal -> mkEq z3e1 z3e2
+    And -> mkAnd [z3e1, z3e2]
+    Or -> mkOr [z3e1, z3e2]
+    Implication -> mkImplies z3e1 z3e2
+    Alias -> undefined
 
-    updateRepBy :: Expr -> Expr
-    updateRepBy (RepBy _ _ v) = v
-    updateRepBy (BinopExpr op' e1' e2') = BinopExpr op' (updateRepBy e1') (updateRepBy e2')
-    updateRepBy (OpNeg e) = OpNeg (updateRepBy e)
-    updateRepBy e = e
+  -- where
+  --   isRepBy :: Env -> Expr -> Z3 AST
+  --   isRepBy env' (RepBy _ _ v) = exprToZ3 env' (updateRepBy v)
+  --   isRepBy env' e = exprToZ3 env' (updateRepBy e)
+
+  --   updateRepBy :: Expr -> Expr
+  --   updateRepBy (RepBy _ _ v) = v
+  --   updateRepBy (BinopExpr op' e1' e2') = BinopExpr op' (updateRepBy e1') (updateRepBy e2')
+  --   updateRepBy (OpNeg e) = OpNeg (updateRepBy e)
+  --   updateRepBy e = e
 exprToZ3 env (Forall str e) = do
   case M.lookup str env of
     Just var -> do
@@ -136,7 +136,6 @@ isValidPath (Path stmts env) = do
 isSatisfiablePath :: Path -> Z3 Bool
 isSatisfiablePath (Path stmts env) = do
   let conj = conjunctive stmts
-  liftIO $ print conj
   isSatisfiableExpr env conj
 
 -- | This function checks if an expression is valid.
