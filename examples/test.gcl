@@ -1,0 +1,4 @@
+min(x:int, y:[]int | z:int) {
+  x := 1;
+  if (y[i] < y[i]) then { skip } else { skip } ;
+}

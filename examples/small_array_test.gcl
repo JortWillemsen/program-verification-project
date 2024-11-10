@@ -1,6 +1,0 @@
-arrayTest(a: []int | x: int) {
-  a[i] := 1;
-
-  x := a[i];
-  assert (x = 1)
-}

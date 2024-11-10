@@ -7,7 +7,6 @@
 // N is an experiment parameter; replace it with a concrete value.
 
 bsort( a : []int | b : []int) {
-   N := 10;
   assume #a>=0 && #a>=N ;
   var k:int {
     k := 0 ;

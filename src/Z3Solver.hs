@@ -1,199 +1,79 @@
 module Z3Solver where
 
-import Control.Monad (foldM)
-import Data.Map as M
-import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
-import Types (Env, Path (Path), Statement (Decl))
 import Z3.Monad
-  ( AST,
-    MonadZ3,
-    mkAdd,
-    mkAnd,
-    mkArraySort,
-    mkBoolSort,
-    mkDiv,
-    mkEq,
-    mkExistsConst,
-    mkFalse,
-    mkForall,
-    mkForallConst,
-    mkFreshBoolVar,
-    mkFreshConst,
-    mkFreshIntVar,
-    mkFreshVar,
-    mkGe,
-    mkGt,
-    mkImplies,
-    mkIntNum,
-    mkIntSort,
-    mkInteger,
-    mkIte,
-    mkLe,
-    mkLt,
-    mkMul,
-    mkNot,
-    mkOr,
-    mkSelect,
-    mkStore,
-    mkStringSymbol,
-    mkSub,
-    mkTrue,
-    toApp, mkBool, mkIntVar, mkExists,
-  )
-import Data.Map (insert)
+import Types (Env, Path (..))
+import GCLParser.GCLDatatype (Expr(..), BinOp (..), VarDeclaration (..), Type (..), PrimitiveType (..))
+import qualified Data.Map as M
+import GCLHelper (getVarName)
+import Control.Monad (foldM)
 import Control.Monad.Cont (MonadIO(liftIO))
-import Debug.Trace (trace)
+import WlpGenerator (wlp, conjunctive)
 
-buildEnv :: (MonadZ3 z3) => [Statement] -> [VarDeclaration] -> z3 Env
-buildEnv path decls = do
-  let declarations = decls ++ getVarDeclarations path
-  foldM (flip addDeclToEnv) empty declarations
+buildEnv :: [VarDeclaration] -> Z3 Env
+buildEnv = foldM buildEnv' M.empty
+  where
+    buildEnv' :: Env -> VarDeclaration -> Z3 Env
+    buildEnv' env (VarDeclaration str typ) =
+      case typ of
+        PType prim -> case prim of
+          PTInt -> do
+            freshInt <- mkFreshIntVar str
+            return $ M.insert str freshInt env
+          PTBool -> do
+            freshBool <- mkFreshBoolVar str
+            return $ M.insert str freshBool env
+        RefType -> error "We do not support RefType"
+        AType prim -> case prim of
+          PTInt -> do
+            symb <- mkStringSymbol str
+            intSort <- mkIntSort
+            arraySort <- mkArraySort intSort intSort
+            integerArray <- mkVar symb arraySort
 
--- Add a single variable declaration to the environment
-addDeclToEnv :: (MonadZ3 z3) => VarDeclaration -> Env -> z3 Env
-addDeclToEnv (VarDeclaration str typ) env = case typ of
-  PType prim -> case prim of
-    -- Create an integer variable
-    PTInt -> do
-      freshInt <- mkFreshIntVar str
-      return $ insert str freshInt env
-    -- Create a boolean variable
-    PTBool -> do
-      freshBool <- mkFreshBoolVar str
-      return $ insert str freshBool env
-  -- Handle reference types here if needed
-  RefType -> undefined
-  -- Handle array types
-  AType prim -> case prim of
-    -- Create an integer array
-    PTInt -> do
-      domain <- mkIntSort
-      range <- mkIntSort
-      arraySort <- mkArraySort domain range
-      freshArray <- mkFreshConst str arraySort
+            let env' = M.insert str integerArray env
+            let sizeName = '#' : str
+            sizeInt <- mkFreshIntVar sizeName
 
-      let sizeName = '#' : str
-      sizeInt <- mkFreshIntVar sizeName
+            return $ M.insert sizeName sizeInt env'
+          PTBool -> do
+            symb <- mkStringSymbol str
+            intSort <- mkIntSort
+            boolSort <- mkBoolSort
+            arraySort <- mkArraySort intSort boolSort
+            booleanArray <- mkVar symb arraySort
 
-      return $ insert str freshArray $ insert sizeName sizeInt env
-    -- Create a boolean array
-    PTBool -> do
-      domain <- mkIntSort
-      range <- mkBoolSort
+            let env' = M.insert str booleanArray env
+            let sizeName = '#' : str
+            sizeInt <- mkFreshIntVar sizeName
 
-      let sizeName = '#' : str
-      sizeInt <- mkFreshIntVar sizeName
+            return $ M.insert sizeName sizeInt env'
 
-      arraySort <- mkArraySort domain range
-      freshArray <- mkFreshConst str arraySort
-      return $ insert str freshArray $ insert sizeName sizeInt env
-
--- Build the environment from the given expression
--- addExprToEnv :: (MonadZ3 z3) => Expr -> Env -> z3 Env
--- addExprToEnv LitNull cEnv = return cEnv
--- addExprToEnv (Forall str e) cEnv = case M.lookup str cEnv of
---   Just _ -> addExprToEnv e cEnv
---   Nothing -> do
---     freshVar <- mkFreshIntVar str
---     addExprToEnv e $ M.insert str freshVar cEnv
--- addExprToEnv (Exists str e) cEnv = case M.lookup str cEnv of
---   Just _ -> addExprToEnv e cEnv
---   Nothing -> do
---     freshVar <- mkFreshIntVar str
---     addExprToEnv e $ M.insert str freshVar cEnv
--- addExprToEnv (Var n) cEnv = case M.lookup n cEnv of
---   Just _ -> return cEnv
---   Nothing -> do
---     freshVar <- mkFreshIntVar n
---     return $ M.insert n freshVar cEnv
--- addExprToEnv (ArrayElem e1 i) cEnv = do
---   env' <- addExprToEnv e1 cEnv
---   addExprToEnv i env'
--- addExprToEnv (Parens e) cEnv = addExprToEnv e cEnv
--- addExprToEnv (OpNeg e) cEnv = addExprToEnv e cEnv
--- addExprToEnv (BinopExpr _ e1 e2) cEnv = do
---   env1 <- addExprToEnv e1 cEnv
---   addExprToEnv e2 env1
--- addExprToEnv (RepBy arr i v) cEnv = do
---   env1 <- addExprToEnv arr cEnv
---   env2 <- addExprToEnv i env1
---   addExprToEnv v env2
--- addExprToEnv (Cond g e1 e2) cEnv = do
---   env1 <- addExprToEnv g cEnv
---   env2 <- addExprToEnv e1 env1
---   addExprToEnv e2 env2
--- addExprToEnv (SizeOf e) cEnv = addExprToEnv e cEnv
--- addExprToEnv (NewStore e) cEnv = addExprToEnv e cEnv
--- addExprToEnv (Dereference _) cEnv = return cEnv -- Handle as needed or leave it as is
--- addExprToEnv (LitI _) cEnv = return cEnv
--- addExprToEnv (LitB _) cEnv = return cEnv
-
-getVarDeclarations :: [Statement] -> [VarDeclaration]
-getVarDeclarations [] = []
-getVarDeclarations ((Decl decls) : xs) = decls ++ getVarDeclarations xs
-getVarDeclarations (x : xs) = getVarDeclarations xs
-
-exprToZ3 :: (MonadZ3 z3) => Expr -> Env -> z3 AST
-exprToZ3 LitNull env = undefined -- optional
-exprToZ3 (Forall str e) env = case M.lookup str env of
-  Just z3var -> do
-    z3Expr <- exprToZ3 e env
-    intSort <- mkIntSort
-    symbol <- mkStringSymbol str
-    -- [Pattern] -> [Symbol] -> [Sort] -> AST -> z3 AST
-    mkForall [] [symbol] [intSort] z3Expr -- Use the App for bound variable
-  Nothing -> error "dit hoort niet te gebeuren"
-exprToZ3 (Parens e) env = exprToZ3 e env
-exprToZ3 (ArrayElem e1 i) env = do
-  z3Index <- exprToZ3 i env
-  z3Arr <- exprToZ3 e1 env
-  mkSelect z3Arr z3Index
-
-exprToZ3 (OpNeg e) env = do
-  z3Expr <- exprToZ3 e env
-  liftIO $ putStrLn $ "We are hereeeeee: " ++ show e
-  mkNot z3Expr
-
-exprToZ3 (Exists str e) env = do
-  qVar <- mkFreshIntVar str
-  app <- toApp qVar
-  z3Expr <- exprToZ3 e env
-  mkExistsConst [] [app] z3Expr -- Faulty
-exprToZ3 (SizeOf e) env = do
-  let str = '#' : findStr e
+exprToZ3 :: Env -> Expr -> Z3 AST
+exprToZ3 env (Var str) = do
   case M.lookup str env of
-    Just z3Var -> return z3Var -- Return existing Z3 variable if found
-    Nothing -> do
-      error $ "dit hoort niet te gebeuren #" ++ show str
-exprToZ3 (RepBy arr i v) env = do
-  arrZ3 <- exprToZ3 arr env
-  indexZ3 <- exprToZ3 i env
-  valueZ3 <- exprToZ3 v env
-  mkStore arrZ3 indexZ3 valueZ3
-exprToZ3 (Cond g e1 e2) env = do
-  guardZ3 <- exprToZ3 g env
-  thenZ3 <- exprToZ3 e1 env
-  elseZ3 <- exprToZ3 e2 env
-  mkIte guardZ3 thenZ3 elseZ3
-exprToZ3 (NewStore e) env = undefined -- optional
-exprToZ3 (Dereference str) env = undefined -- optional
-exprToZ3 (LitI i) env = mkInteger (toInteger i)
-exprToZ3 (LitB b) env = mkBool b
-exprToZ3 (Var n) env = do
-  case M.lookup n env of
-    Just z3Var -> return z3Var -- Return existing Z3 variable if found
-    Nothing -> do
-      error "dit hoort niet te gebeuren (Var n)"
-exprToZ3 (BinopExpr op e1 e2) env = do
+    Just z3Var -> return z3Var
+    Nothing -> error "(Var): Env was not constructed properly"
+exprToZ3 _ (LitB b) = mkBool b
+exprToZ3 _ (LitI i) = mkIntNum i
+exprToZ3 _ LitNull = undefined -- Optional
+exprToZ3 env (Parens e) = exprToZ3 env e
+exprToZ3 env (ArrayElem array index) = do
+    z3Arr <- exprToZ3 env array
+    z3Index <- exprToZ3 env index
+    --liftIO $ putStrLn $ "We select array " ++ show array
+    --liftIO $ putStrLn $ "We select index " ++ show index
+    mkSelect z3Arr z3Index
+exprToZ3 env (OpNeg e) = exprToZ3 env e >>= mkNot
+exprToZ3 env (BinopExpr op e1 e2) = do
   e1Z3 <- isRepBy env e1
   e2Z3 <- isRepBy env e2
   case op of
     And -> mkAnd [e1Z3, e2Z3]
     Or -> mkOr [e1Z3, e2Z3]
     Implication -> mkImplies e1Z3 e2Z3
-    LessThan -> trace ("LessThan") mkLt e1Z3 e2Z3
+    LessThan -> mkLt e1Z3 e2Z3
     LessThanEqual -> mkLe e1Z3 e2Z3
-    GreaterThan ->  mkGt e1Z3 e2Z3
+    GreaterThan -> mkGt e1Z3 e2Z3
     GreaterThanEqual -> mkGe e1Z3 e2Z3
     Equal -> mkEq e1Z3 e2Z3
     Minus -> mkSub [e1Z3, e2Z3]
@@ -202,30 +82,83 @@ exprToZ3 (BinopExpr op e1 e2) env = do
     Divide -> mkDiv e1Z3 e2Z3
     Alias -> mkEq e1Z3 e2Z3
   where
-    isRepBy :: (MonadZ3 z3) => Env -> Expr -> z3 AST
-    isRepBy env (RepBy _ _ v) = exprToZ3 (updateRepBy v) env
-    isRepBy env e = exprToZ3 (updateRepBy e) env
+    isRepBy :: Env -> Expr -> Z3 AST
+    isRepBy env' (RepBy _ _ v) = exprToZ3 env' (updateRepBy v)
+    isRepBy env' e = exprToZ3 env' (updateRepBy e)
 
     updateRepBy :: Expr -> Expr
     updateRepBy (RepBy _ _ v) = v
-    updateRepBy (BinopExpr op e1 e2) = BinopExpr op (updateRepBy e1) (updateRepBy e2)
+    updateRepBy (BinopExpr op' e1' e2') = BinopExpr op' (updateRepBy e1') (updateRepBy e2')
     updateRepBy (OpNeg e) = OpNeg (updateRepBy e)
     updateRepBy e = e
+exprToZ3 env (Forall str e) = do
+  case M.lookup str env of
+    Just var -> do
+      x <- toApp var
+      body <- exprToZ3 env e
+      mkForallConst [] [x] body
+    Nothing -> error "(Forall): Env was not constructed properly"
+exprToZ3 env (Exists str e) = do
+  case M.lookup str env of
+    Just var -> do
+      x <- toApp var
+      body <- exprToZ3 env e
+      mkExistsConst [] [x] body
+    Nothing -> error "(Exists): Env was not constructed properly"
+exprToZ3 _ (SizeOf e) = mkStringSymbol ('#' : getVarName e) >>= mkIntVar
+exprToZ3 env (RepBy array index value) = do
+  e1Z3 <- exprToZ3 env array
+  e2Z3 <- exprToZ3 env index
+  e3Z3 <- exprToZ3 env value
+  mkStore e1Z3 e2Z3 e3Z3
+exprToZ3 env (Cond guard ifBranch elseBranch) = do
+  e1Z3 <- exprToZ3 env guard
+  e2Z3 <- exprToZ3 env ifBranch
+  e3Z3 <- exprToZ3 env elseBranch
+  mkIte e1Z3 e2Z3 e3Z3
+exprToZ3 _ (NewStore _) = undefined -- Optional
+exprToZ3 _ (Dereference _) = undefined -- Optional 
 
-findStr :: Expr -> String
-findStr (Var n) = n
-findStr (Parens e) = findStr e
-findStr (OpNeg e) = findStr e
-findStr (RepBy e _ _) = findStr e
+-- | This function checks if an expression is satisfiable
+isSatisfiableExpr :: Env -> Expr -> Z3 Bool
+isSatisfiableExpr env e = do
+  verdict <- checker env e
+  case verdict of
+    Sat -> return True -- Formula is satisfiable
+    Unsat -> return False -- Formula is UNsatisfiable
+    Undef -> error "Undefined satisfiable result"
 
-makeProblematicAST :: (MonadZ3 z3) => z3 AST
-makeProblematicAST = do
-  number <- mkInteger 1
+isValidPath :: Path -> Z3 Bool
+isValidPath (Path stmts env) = do
+  let calculatedWlp = wlp stmts
+  isValidExpr env calculatedWlp
 
-  false <- mkFalse
-  notFalse <- mkNot false
-  true <- mkTrue
-  leq <- mkLt number number
-  yeet <- mkNot leq
+isSatisfiablePath :: Path -> Z3 Bool
+isSatisfiablePath (Path stmts env) = do
+  let conj = conjunctive stmts
+  liftIO $ print conj
+  isSatisfiableExpr env conj
 
-  mkAnd [yeet]
+-- | This function checks if an expression is valid.
+isValidExpr :: Env -> Expr -> Z3 Bool
+isValidExpr env e = do
+  verdict <- inverseChecker env e
+  case verdict of
+    Sat -> return False -- Formula is NOT valid
+    Unsat -> return True -- Formula is valid
+    Undef -> error "Undefined satisfiable result"
+
+-- | Converts WLP Expr to Z3 expression and checks its satisfiability
+checker :: Env -> Expr -> Z3 Result
+checker env e = do
+  eZ3 <- exprToZ3 env e
+  assert eZ3
+  check
+
+-- | Converts WLP Expr to Z3 expression, inverts it and checks its satisfiability (Validity of original WLP Expr)
+inverseChecker :: Env -> Expr -> Z3 Result
+inverseChecker env e = do
+  eZ3 <- exprToZ3 env e
+  neZ3 <- mkNot eZ3
+  assert neZ3
+  check

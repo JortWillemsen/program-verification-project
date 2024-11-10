@@ -1,4 +1,0 @@
-min(x:int | x:int) {
-  x := 1;
-  assert (true)
-} 
