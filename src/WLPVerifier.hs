@@ -3,7 +3,7 @@ module WLPVerifier where
 import Control.Monad.Cont (MonadIO (liftIO), filterM)
 import DCG
 import qualified Data.Map as M
-import DirectedCallGraphProcessor (dcgToStatements, programDCG, prunePath, statementsToPath, validatePath, feasiblePath)
+import DirectedCallGraphProcessor (dcgToStatements, programDCG, prunePath, validatePath, feasiblePath)
 import GCLParser.GCLDatatype (Expr (..), PrimitiveType (PTInt), Program (input, output, stmt), Stmt (..), Type (..), VarDeclaration (VarDeclaration))
 import GCLParser.Parser (parseGCLfile)
 import PreProcessor (makeUniqueForall, preprocess)
@@ -11,7 +11,7 @@ import ProgramProcessor (negateExpr, wlp)
 import Text.ParserCombinators.ReadP (string)
 import Z3.Base (Result (Sat, Unsat))
 import Z3.Monad (Result (Sat, Unsat), assert, check, evalZ3, MonadZ3)
-import Z3Solver (buildEnv)
+import Z3Solver (buildEnv, makeProblematicAST)
 import Prelude
 import Types (Path(Path))
 
@@ -37,23 +37,32 @@ run file = do
       let preprocessedProgram = preprocess uniqueProgram True True True
 
       evalZ3 $ do
+        -- problem <- makeProblematicAST
+
+        -- assert problem
+        -- result <- check
+
+        -- case result of
+        --   Sat -> return True
+        --   Unsat -> return False
+        --   _ -> error "Result is weird (feasible)"
+
         let pdcg = programDCG $ stmt preprocessedProgram
 
         -- liftIO $ putStrLn $ printDCG pdcg
 
         paths <- dcgToStatements pdcg (input program ++ output program ++ getVarDeclarationsProgram (stmt preprocessedProgram)) []
-
-        let pathLengths = map (\(Path s _) -> length s) paths
-        -- liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") envPaths)
+        -- let pathLengths = map (\(Path s _) -> length s) paths
+        -- liftIO $ putStrLn (concatMap (\(Path s _) -> show s ++ "\n") paths)
         --liftIO $ putStr $ "Max path length: " ++ show (maximum pathLengths)
         -- prunedPaths <- filterM prunePath envPaths
-        liftIO $ putStr $ ", Total paths: " ++ show (length paths)
+        --liftIO $ putStr $ ", Total paths: " ++ show (length paths)
         
         feasiblePaths <- filterM feasiblePath paths
 
         r <- mapM validatePath feasiblePaths
         
-        liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") r)
+        --liftIO $ putStrLn (concatMap (\p -> show p ++ "\n") r)
         --liftIO $ putStrLn $ "Paths pruned: " ++ show (length paths - length prunedPaths) ++ " Of " ++ show (length paths)
 
         case r of

@@ -28,7 +28,7 @@ programDCG stmt@(GCL.AAssign {}) = Leaf stmt
 programDCG (GCL.Seq GCL.Skip s2) = programDCG s2
 programDCG (GCL.Seq s1 GCL.Skip) = programDCG s1
 programDCG (GCL.Seq s1 s2) = combineDCG (programDCG s1) (programDCG s2)
-programDCG stmt@(GCL.IfThenElse e s1 s2) = Node (SeqNode (GCL.Assume e) (programDCG s1)) stmt (SeqNode (GCL.Assume (GCL.OpNeg e)) (programDCG s2))
+programDCG stmt@(GCL.IfThenElse e s1 s2) = Node (SeqNode (GCL.Assume e) (programDCG s1)) stmt (SeqNode (GCL.Assume ((GCL.OpNeg e))) (programDCG s2))
 programDCG stmt@(GCL.While e s) = programDCG $ programWhile stmt 20
 programDCG stmt@(GCL.Block decls s) =  DeclNode decls $ programDCG s
 
@@ -39,10 +39,10 @@ prunePath (Path stmts env) =
     let conj = simplify $ makeConjunction (reverse stmts) (GCL.LitB True)
 
     feasible <- feasibleZ3 conj env
-    
+
     --liftIO (putStrLn $ if (feasible) then "PRUNING" ++ show conj else "")
     return feasible
-      
+
 
 -- Function that creates a conjunction of the path
 -- meaning all assumptions should be true
@@ -75,38 +75,46 @@ dcgToStatements (Leaf x) decls currentPath = do
   liftIO $ putStrLn $ "found complete path: " ++ show (currentPath ++ [gclToStatement x])
   return [Path (currentPath ++ [gclToStatement x]) env]
 
-dcgToStatements (SeqNode x@(GCL.Assume _) c) decls currentPath = do
-  let newPath = currentPath ++ [gclToStatement x]
-  env <- buildEnv newPath decls
-  liftIO $ putStr $ "found assume: " ++ show (makeConjunction (reverse newPath) (GCL.LitB True))
-  feasible <- prunePath (Path newPath env)
-  if feasible
-    then 
-      do 
-        liftIO $ putStrLn ""
-        dcgToStatements c decls newPath
-    else do 
-      liftIO $ putStrLn (" PRUNING")
-      return []
-
 dcgToStatements (SeqNode x c) decls currentPath = do
   let newPath = currentPath ++ [gclToStatement x]
   dcgToStatements c decls newPath
 
+dcgToStatements (Node l (GCL.IfThenElse e _ _) r) decls currentPath = do
+      env <- buildEnv currentPath decls
+      let conjTrue = makeConjunction (reverse $ currentPath ++ [Assume e]) (GCL.LitB True)
+      let conjFalse = makeConjunction (reverse $ currentPath ++ [Assume (GCL.OpNeg e)]) (GCL.LitB True)
+
+      leftFeasible <- feasibleZ3 conjTrue env
+      rightFeasible <- feasibleZ3 conjFalse env
+
+      if leftFeasible
+        then do
+          liftIO $ putStrLn (show conjTrue)
+          liftIO $ putStrLn $ (show conjFalse) ++ " PRUNING";
+          dcgToStatements l decls currentPath
+        else if rightFeasible 
+          then do
+          liftIO $ putStrLn $ (show conjTrue) ++ " PRUNING"
+          liftIO $ putStrLn (show conjFalse)
+          dcgToStatements r decls currentPath
+        else do
+          liftIO $ putStrLn $ (show conjTrue) ++ " PRUNING"
+          liftIO $ putStrLn $ (show conjFalse) ++ " PRUNING"
+          return []
 dcgToStatements (Node l x r) decls currentPath = do
       leftPaths <- dcgToStatements l decls currentPath
       rightPaths <- dcgToStatements r decls currentPath
       return $ leftPaths ++ rightPaths
 dcgToStatements (DeclNode decls c) decls' currentPath = do
   let newPath = currentPath
-  dcgToStatements c (decls' ++ decls) newPath 
+  dcgToStatements c (decls' ++ decls) newPath
 
-statementsToPath :: (MonadZ3 z3) => [[Statement]] -> [VarDeclaration] -> z3 [Path]
-statementsToPath [] _ = return []
-statementsToPath (p : ps) decls = do
-  env <- buildEnv p decls
-  rest <- statementsToPath ps decls
-  return $ Path p env : rest
+-- statementsToPath :: (MonadZ3 z3) => [[Statement]] -> [VarDeclaration] -> z3 [Path]
+-- statementsToPath [] _ = return []
+-- statementsToPath (p : ps) decls = do
+--   env <- buildEnv p decls
+--   rest <- statementsToPath ps decls
+--   return $ Path p env : rest
 
 -- dcgToPaths :: (MonadZ3 z3) => DCG Stmt -> Env -> z3 ([DCG Stmt], Int)
 -- dcgToPaths Empty env = do

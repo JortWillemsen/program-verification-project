@@ -1,0 +1,12 @@
+smaller_than(a:[]int | z:int){
+  i := 0;
+  a[i] := 1;
+
+  if (false) then {
+    i := i + 1
+  } else {
+    skip
+  };
+
+  assert (i > 0)
+}

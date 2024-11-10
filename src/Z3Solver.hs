@@ -41,6 +41,8 @@ import Z3.Monad
     toApp, mkBool, mkIntVar, mkExists,
   )
 import Data.Map (insert)
+import Control.Monad.Cont (MonadIO(liftIO))
+import Debug.Trace (trace)
 
 buildEnv :: (MonadZ3 z3) => [Statement] -> [VarDeclaration] -> z3 Env
 buildEnv path decls = do
@@ -146,9 +148,12 @@ exprToZ3 (ArrayElem e1 i) env = do
   z3Index <- exprToZ3 i env
   z3Arr <- exprToZ3 e1 env
   mkSelect z3Arr z3Index
+
 exprToZ3 (OpNeg e) env = do
   z3Expr <- exprToZ3 e env
+  liftIO $ putStrLn $ "We are hereeeeee: " ++ show e
   mkNot z3Expr
+
 exprToZ3 (Exists str e) env = do
   qVar <- mkFreshIntVar str
   app <- toApp qVar
@@ -173,30 +178,39 @@ exprToZ3 (Cond g e1 e2) env = do
 exprToZ3 (NewStore e) env = undefined -- optional
 exprToZ3 (Dereference str) env = undefined -- optional
 exprToZ3 (LitI i) env = mkInteger (toInteger i)
-exprToZ3 (LitB True) env = mkTrue
-exprToZ3 (LitB False) env = mkFalse
+exprToZ3 (LitB b) env = mkBool b
 exprToZ3 (Var n) env = do
   case M.lookup n env of
     Just z3Var -> return z3Var -- Return existing Z3 variable if found
     Nothing -> do
       error "dit hoort niet te gebeuren (Var n)"
 exprToZ3 (BinopExpr op e1 e2) env = do
-  z3e1 <- exprToZ3 e1 env
-  z3e2 <- exprToZ3 e2 env
+  e1Z3 <- isRepBy env e1
+  e2Z3 <- isRepBy env e2
   case op of
-    Plus -> mkAdd [z3e1, z3e2]
-    Minus -> mkSub [z3e1, z3e2]
-    Multiply -> mkMul [z3e1, z3e2]
-    Divide -> mkDiv z3e1 z3e2
-    LessThan -> mkLt z3e1 z3e2
-    LessThanEqual -> mkLe z3e1 z3e2
-    GreaterThan -> mkGt z3e1 z3e2
-    GreaterThanEqual -> mkGe z3e1 z3e2
-    Equal -> mkEq z3e1 z3e2
-    And -> mkAnd [z3e1, z3e2]
-    Or -> mkOr [z3e1, z3e2]
-    Implication -> mkImplies z3e1 z3e2
-    Alias -> undefined
+    And -> mkAnd [e1Z3, e2Z3]
+    Or -> mkOr [e1Z3, e2Z3]
+    Implication -> mkImplies e1Z3 e2Z3
+    LessThan -> trace ("LessThan") mkLt e1Z3 e2Z3
+    LessThanEqual -> mkLe e1Z3 e2Z3
+    GreaterThan ->  mkGt e1Z3 e2Z3
+    GreaterThanEqual -> mkGe e1Z3 e2Z3
+    Equal -> mkEq e1Z3 e2Z3
+    Minus -> mkSub [e1Z3, e2Z3]
+    Plus -> mkAdd [e1Z3, e2Z3]
+    Multiply -> mkMul [e1Z3, e2Z3]
+    Divide -> mkDiv e1Z3 e2Z3
+    Alias -> mkEq e1Z3 e2Z3
+  where
+    isRepBy :: (MonadZ3 z3) => Env -> Expr -> z3 AST
+    isRepBy env (RepBy _ _ v) = exprToZ3 (updateRepBy v) env
+    isRepBy env e = exprToZ3 (updateRepBy e) env
+
+    updateRepBy :: Expr -> Expr
+    updateRepBy (RepBy _ _ v) = v
+    updateRepBy (BinopExpr op e1 e2) = BinopExpr op (updateRepBy e1) (updateRepBy e2)
+    updateRepBy (OpNeg e) = OpNeg (updateRepBy e)
+    updateRepBy e = e
 
 findStr :: Expr -> String
 findStr (Var n) = n
@@ -204,17 +218,14 @@ findStr (Parens e) = findStr e
 findStr (OpNeg e) = findStr e
 findStr (RepBy e _ _) = findStr e
 
-makeBinop :: (MonadZ3 z3) => BinOp -> AST -> AST -> z3 AST
-makeBinop And e1 e2 = mkAnd [e1, e2]
-makeBinop Or e1 e2 = mkOr [e1, e2]
-makeBinop Implication e1 e2 = mkImplies e1 e2
-makeBinop LessThan e1 e2 = mkLt e1 e2
-makeBinop LessThanEqual e1 e2 = mkLe e1 e2
-makeBinop GreaterThan e1 e2 = mkGt e1 e2
-makeBinop GreaterThanEqual e1 e2 = mkGe e1 e2
-makeBinop Equal e1 e2 = mkEq e1 e2
-makeBinop Minus e1 e2 = mkSub [e1, e2]
-makeBinop Plus e1 e2 = mkAdd [e1, e2]
-makeBinop Multiply e1 e2 = mkMul [e1, e2]
-makeBinop Divide e1 e2 = mkDiv e1 e2
-makeBinop Alias e1 e2 = undefined -- TODO
+makeProblematicAST :: (MonadZ3 z3) => z3 AST
+makeProblematicAST = do
+  number <- mkInteger 1
+
+  false <- mkFalse
+  notFalse <- mkNot false
+  true <- mkTrue
+  leq <- mkLt number number
+  yeet <- mkNot leq
+
+  mkAnd [yeet]
