@@ -1,28 +1,38 @@
 module Main where
 
-import Control.Monad.IO.Class (liftIO)
 import Criterion.Main
 import Criterion.Types (Config (..), Verbosity (..))
-import qualified Data.Map as M
-import FormulaProcessor (negateExpr, processAST, wlp)
 import GCLParser.GCLDatatype
 import GCLParser.Parser
-import PreProcessor
-import Z3.Base
-import Z3.Monad (Z3, assert, check, evalZ3)
-import Z3Solver (buildEnv)
+import Runner (run)
+import Types (Options (..))
 
 -- Array of programs to benchmark
-benchmarkCases :: [FilePath]
-benchmarkCases = ["examples/E.gcl", "examples/S1.gcl"]
+benchmarkCases :: [(FilePath, String, Options)]
+benchmarkCases =
+  [ ("examples/E.gcl", "E", Options {verbose = False, k = 10, n = 2, pruneLen = 0}),
+    ("examples/S1.gcl", "S1", Options {verbose = False, k = 10, n = 2, pruneLen = 0}),
+    -- ("examples/benchmark/divByN.gcl", "divByN k=10", Options {verbose = False, k = 10, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/divByN.gcl", "divByN k=20", Options {verbose = False, k = 20, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/divByN.gcl", "divByN k=30", Options {verbose = False, k = 30, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/divByN.gcl", "divByN k=40", Options {verbose = False, k = 40, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/divByN.gcl", "divByN k=50", Options {verbose = False, k = 50, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/pullUp.gcl", "pullUp k=10", Options {verbose = False, k = 10, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/pullUp.gcl", "pullUp k=20", Options {verbose = False, k = 20, n = 10, pruneLen = 0})
+    -- ("examples/benchmark/pullUp.gcl", "pullUp k=30", Options {verbose = False, k = 30, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/pullUp.gcl", "pullUp k=40", Options {verbose = False, k = 40, n = 10, pruneLen = 0}),
+    -- ("examples/benchmark/pullUp.gcl", "pullUp k=50", Options {verbose = False, k = 50, n = 10, pruneLen = 0}),
 
--- Benchmark the `check` call
-benchmarkCheck :: Expr -> [VarDeclaration] -> IO ()
-benchmarkCheck processedWlp decls = evalZ3 $ do
-  z3Expr <- setupZ3Env processedWlp decls
-  assert z3Expr
-  _ <- check
-  return ()
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=2", Options {verbose = False, k = 20, n = 2, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=3", Options {verbose = False, k = 20, n = 3, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=4", Options {verbose = False, k = 20, n = 4, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=5", Options {verbose = False, k = 20, n = 5, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=6", Options {verbose = False, k = 20, n = 6, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=7", Options {verbose = False, k = 20, n = 7, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=8", Options {verbose = False, k = 20, n = 8, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=9", Options {verbose = False, k = 20, n = 9, pruneLen = 0}),
+    ("examples/benchmark/invalidPullUp.gcl", "invalidPullUp n=10", Options {verbose = False, k = 20, n = 10, pruneLen = 0})
+  ]
 
 main :: IO ()
 main = do
@@ -41,31 +51,6 @@ main = do
   defaultMainWith config benchmarks
 
 -- Create a benchmark for a single GCL file
-createBenchmark :: FilePath -> IO Benchmark
-createBenchmark filePath = do
-  eitherWlp <- parseAndProcessGCL filePath
-  case eitherWlp of
-    Left err -> do
-      putStrLn ("Error processing GCL file: " ++ err)
-      return $ bench ("Error: " ++ filePath) $ nfIO (return ())
-    Right (processedWlp, decls) ->
-      return $ bench filePath $ nfIO (benchmarkCheck processedWlp decls)
-
--- | Parses and preprocesses a GCL file, then computes the WLP.
-parseAndProcessGCL :: String -> IO (Either String (Expr, [VarDeclaration]))
-parseAndProcessGCL file = do
-  result <- parseGCLfile file
-  case result of
-    Left err -> return $ Left err
-    Right program -> do
-      let preprocessedProgram = preprocess program 10 True True True
-      let processedWlp = wlp (stmt preprocessedProgram) (LitB True)
-      let decls = input program -- Extract variable declarations
-      return $ Right (processedWlp, decls)
-
--- | Sets up the Z3 environment using variable declarations and the WLP expression.
-setupZ3Env :: Expr -> [VarDeclaration] -> Z3 AST
-setupZ3Env processedWlp decls = do
-  let negatedWlp = negateExpr processedWlp
-  env <- buildEnv decls processedWlp M.empty -- Build the Z3 environment
-  makeAst env negatedWlp -- Convert the WLP to Z3 expression
+createBenchmark :: (FilePath, String, Options) -> IO Benchmark
+createBenchmark (filePath, title, options) = do
+  return $ bench title $ nfIO (run options filePath)

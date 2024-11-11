@@ -47,4 +47,3 @@ simplifyBinop GCL.Plus (GCL.LitI a) (GCL.LitI b) = GCL.LitI $ a + b
 simplifyBinop GCL.Multiply (GCL.LitI a) (GCL.LitI b) = GCL.LitI $ a * b
 -- don't do the rest
 simplifyBinop o e1 e2 = GCL.BinopExpr o e1 e2
-    

@@ -1,29 +1,29 @@
 module Z3Solver where
 
-import Z3.Monad
-import Types (Env, Path)
-import GCLParser.GCLDatatype (Expr(..), BinOp (..), VarDeclaration (..), Type (..), PrimitiveType (..))
 import qualified Data.Map as M
-import WlpGenerator (wlp, conjunctive)
-import PreProcessor as PP
-import GHC.IO (unsafePerformIO)
-import GCLHelper (getVarName)
-import qualified PreProcessor as PP
 import Debug.Trace (trace)
+import GCLHelper (getVarName)
+import GCLParser.GCLDatatype (BinOp (..), Expr (..), PrimitiveType (..), Type (..), VarDeclaration (..))
+import GHC.IO (unsafePerformIO)
+import PreProcessor as PP (simplify)
+import qualified PreProcessor as PP
+import Types (Env, Path)
+import WlpGenerator (conjunctive, wlp)
+import Z3.Monad
 
 buildEnv :: [VarDeclaration] -> Env
 buildEnv = foldl buildEnv' M.empty
   where
     buildEnv' :: Env -> VarDeclaration -> Env
-    buildEnv' env (VarDeclaration str typ) = 
+    buildEnv' env (VarDeclaration str typ) =
       case typ of
         PType _ -> M.insert str typ env
         RefType -> error "We do not support RefType"
         AType _ -> do
-            let sizeName = '#' : str
-            let env' = M.insert str typ env
-          
-            M.insert sizeName (PType PTInt) env'
+          let sizeName = '#' : str
+          let env' = M.insert str typ env
+
+          M.insert sizeName (PType PTInt) env'
 
 exprToZ3 :: Env -> Expr -> Z3 AST
 exprToZ3 env (Var s) = case M.lookup s env of
@@ -93,7 +93,7 @@ exprToZ3 env (SizeOf e) = do
   case M.lookup name env of
     (Just v) -> mkStringSymbol name >>= mkIntVar
     Nothing -> error "De fuck do i know"
-  -- mkStringSymbol ('#' : getVarName e) >>= mkIntVar
+-- mkStringSymbol ('#' : getVarName e) >>= mkIntVar
 exprToZ3 env (RepBy var index value) = do
   e1Z3 <- exprToZ3 env var
   e2Z3 <- exprToZ3 env index
@@ -106,7 +106,6 @@ exprToZ3 env (Cond guard trueCon falseCon) = do
   mkIte guardZ3 trueZ3 falseZ3
 exprToZ3 _ (NewStore _) = error "new store not defined yet"
 exprToZ3 _ (Dereference _) = error " dereference (optional)"
-
 
 findStr :: Expr -> String
 findStr (Var n) = n
@@ -152,7 +151,7 @@ isValidExpr env e = unsafePerformIO $ do
 isValidExprModel :: Env -> Expr -> Either Bool String
 isValidExprModel env e = unsafePerformIO $ do
   evalZ3 $ do
-    verdict <-  inverseChecker env e
+    verdict <- inverseChecker env e
     case verdict of
       Sat -> do
         (_, model) <- getModel
@@ -160,7 +159,7 @@ isValidExprModel env e = unsafePerformIO $ do
           (Just m) -> do
             modelString <- showModel m
             return $ Right modelString
-            -- Return the model when satisfiable
+          -- Return the model when satisfiable
           Nothing -> error "Expected a model but none found for Sat result"
       Unsat -> return (Left True) -- Formula is valid
       Undef -> error "Undefined satisfiable result"
