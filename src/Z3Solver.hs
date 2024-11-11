@@ -5,9 +5,10 @@ import Types (Env, Path)
 import GCLParser.GCLDatatype (Expr(..), BinOp (..), VarDeclaration (..), Type (..), PrimitiveType (..))
 import qualified Data.Map as M
 import WlpGenerator (wlp, conjunctive)
-import Debug.Trace (trace)
+import PreProcessor as PP
 import GHC.IO (unsafePerformIO)
 import GCLHelper (getVarName)
+import qualified PreProcessor as PP
 
 buildEnv :: [VarDeclaration] -> Env
 buildEnv = foldl buildEnv' M.empty
@@ -110,12 +111,12 @@ findStr _ = error "This is not supported"
 
 isValidPath :: Env -> Path -> IO Bool
 isValidPath env path = do
-  let calculatedWlp = wlp path
+  let calculatedWlp = PP.simplify $ wlp path
   return $ isValidExpr env calculatedWlp
 
 isSatisfiablePath :: Env -> Path -> IO Bool
 isSatisfiablePath env path = do
-  let conj = conjunctive path
+  let conj = PP.simplify $ conjunctive path
   isSatisfiableExpr env conj
 
 -- | Checks if an expression is satisfiable without exposing IO in the return type

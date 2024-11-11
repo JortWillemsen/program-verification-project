@@ -12,13 +12,13 @@ main :: IO ()
 main = do
   let options =
         Options
-          { verbose = True,
+          { verbose = False,
             k = 10,
             n = 3,
             pruneLen = 2
           }
 
-  isValid <- run options "examples/minind.gcl"
+  isValid <- run options "examples/E.gcl"
 
   putStrLn $ "Is the program valid? " ++ show isValid
 

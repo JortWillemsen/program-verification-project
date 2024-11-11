@@ -70,7 +70,7 @@ dcgToPaths dcg env o = dcgToPaths' dcg env []
           satThen <- isSatisfiableExpr env conjThen
           satElse <- isSatisfiableExpr env conjElse
 
-          pathsThen <- if satThen then dcgToPaths' r env' (cur ++ [Assume (GCL.OpNeg g)]) else return []
+          pathsThen <- if satThen then dcgToPaths' l env' (cur ++ [Assume g]) else return []
           pathsElse <- if satElse then dcgToPaths' r env' (cur ++ [Assume (GCL.OpNeg g)]) else return []
 
           return $ pathsThen ++ pathsElse
