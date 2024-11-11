@@ -3,8 +3,8 @@
 module Types where
 
 import qualified Data.Map as M
-import Z3.Base (AST)
 import qualified GCLParser.GCLDatatype as GCL
+import GCLParser.GCLDatatype (Type)
 
 -- Directed Call Graph (Tree structure)
 data DCG a
@@ -13,7 +13,7 @@ data DCG a
   | SeqNode a (DCG a)
   | Empty
 
-type Env = M.Map String AST
+type Env = M.Map String Type
 
 data Statement
   = Assert GCL.Expr
@@ -21,7 +21,7 @@ data Statement
   | Assign String GCL.Expr
   | AAssign String GCL.Expr GCL.Expr
 
-data Path = Path [Statement] Env
+type Path = [Statement]
 
 
 data Options = Options 
@@ -37,15 +37,6 @@ instance Show Statement where
   show (Assume e) = "assume " ++ show e
   show (Assign str e) = str ++ " := " ++ show e
   show (AAssign str e1 e2) = str ++ "[" ++ show e1 ++ "] := " ++ show e2
-
-instance Show Path where
-  show :: Path -> String
-  show (Path stmts _) = 
-    "Path: \n" ++ 
-    "   "      ++ 
-    show stmts ++ 
-    "\n   "    ++ 
-    "\n\n"
 
 instance (Show a) => Show (DCG a) where
   show :: Show a => DCG a -> String

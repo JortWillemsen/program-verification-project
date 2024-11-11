@@ -2,7 +2,7 @@
 module PathGenerator where
 
 import qualified GCLParser.GCLDatatype as GCL
-import Types (DCG (Empty, Leaf, SeqNode, Node), Options (k, pruneLen, verbose), Statement (Assume), Path (Path), Env, gclToStatement)
+import Types (DCG (Empty, Leaf, SeqNode, Node), Options (k, pruneLen, verbose), Statement (Assume), Env, gclToStatement, Path)
 import Z3.Monad (Z3, evalZ3)
 import Z3Solver (isSatisfiableExpr, buildEnv)
 import WlpGenerator (conjunctive)
@@ -41,57 +41,54 @@ unfold s@(GCL.While e b) k
     s2 = GCL.Skip
 
 -- | Converts the DCG to a list of paths
-dcgToPaths :: DCG GCL.Stmt -> [VarDeclaration] -> Options -> IO [Path]
-dcgToPaths dcg d o = dcgToPaths' dcg d []
+dcgToPaths :: DCG GCL.Stmt -> Env -> Options -> IO [Path]
+dcgToPaths dcg env o = dcgToPaths' dcg env []
   where
-    dcgToPaths' :: DCG GCL.Stmt -> [VarDeclaration] -> [Statement] -> IO [Path]
+    dcgToPaths' :: DCG GCL.Stmt -> Env -> [Statement] -> IO [Path]
     dcgToPaths' Empty _ _ = return []
-    dcgToPaths' (Leaf x) decls cur = evalZ3 $ do
-      env <- buildEnv decls
+    dcgToPaths' (Leaf x) _ cur = return [cur ++ [gclToStatement x]]
 
-      return [Path (cur ++ [gclToStatement x]) env]
-    
-    
-    
-    
-    dcgToPaths' (SeqNode x c) decls cur = dcgToPaths' c decls (cur ++ [gclToStatement x])
-    
-    
-    
-    dcgToPaths' (Node l (GCL.IfThenElse g _ _) r) decls cur = do
+    dcgToPaths' (SeqNode x c) env' cur = dcgToPaths' c env' (cur ++ [gclToStatement x])
+
+    dcgToPaths' (Node l (GCL.IfThenElse g _ _) r) env' cur = do
       -- make conjunctions
-      
-      let conjThen = conjunctive $ cur ++ [Assume g]
-      let conjElse = conjunctive $ cur ++ [Assume (GCL.OpNeg g)]
-      
-      when (verbose o) $ liftIO $ print conjThen
-      when (verbose o) $ liftIO $ print conjElse
 
-      resThen <- evalZ3 $ do
-        envThen <- buildEnv decls
-        when (verbose o) $ liftIO $ print envThen
-
-        return $ isSatisfiableExpr envThen conjThen
-      
-      resElse <- evalZ3 $ do
-        envElse <- buildEnv decls
-        return $ isSatisfiableExpr envElse conjElse
-
-      resThenBool <- resThen
-      resElseBool <- resElse
-
-
-      if length cur > pruneLen o
+      if pruneLen o > length cur
         then do
-          pathThen <- if resThenBool then dcgToPaths' l decls (cur ++ [Assume g]) else return []
-          pathElse <- if resElseBool then dcgToPaths' r decls (cur ++ [Assume (GCL.OpNeg g)]) else return []
-          return $ pathThen ++ pathElse
-        else do 
-          pathL <- dcgToPaths' l decls (cur ++ [Assume g])
-          pathR <- dcgToPaths' r decls (cur ++ [Assume (GCL.OpNeg g)])
-          return $ pathL ++ pathR
+          pathsThen <- dcgToPaths' l env' (cur ++ [Assume g])
+          pathsElse <- dcgToPaths' r env' (cur ++ [Assume (GCL.OpNeg g)])
 
-      -- when (length cur) < (pruneLen o) 
+          return $ pathsThen ++ pathsElse
+
+        else do
+          let conjThen = conjunctive $ cur ++ [Assume g]
+          let conjElse = conjunctive $ cur ++ [Assume (GCL.OpNeg g)]
+
+          when (verbose o) $ liftIO $ print conjThen
+          when (verbose o) $ liftIO $ print conjElse
+
+          satThen <- isSatisfiableExpr env conjThen
+          satElse <- isSatisfiableExpr env conjElse
+
+          pathsThen <- if satThen then dcgToPaths' r env' (cur ++ [Assume (GCL.OpNeg g)]) else return []
+          pathsElse <- if satElse then dcgToPaths' r env' (cur ++ [Assume (GCL.OpNeg g)]) else return []
+
+          return $ pathsThen ++ pathsElse
+
+      -- pathsThen <- evalZ3 $ do
+      --   envThen <- buildEnv decls
+      --   when (verbose o) $ liftIO $ print envThen
+      --   resThen <- isSatisfiableExpr envThen conjThen
+      --   return $ if resThen then dcgToPaths' l decls (cur ++ [Assume g]) else return []
+
+      -- pathsElse <- evalZ3 $ do
+      --   envElse <- buildEnv decls
+      --   resElse <- isSatisfiableExpr envElse conjElse
+      --   return $ 
+
+      -- return $ pathsThen ++ pathsElse
+
+      -- -- when (length cur) < (pruneLen o) 
       --   $ return (dcgToPaths' l env (cur ++ [Assume g])) 
       --   ++ 
       --   (dcgToPaths' r env (cur ++ [Assume (GCL.OpNeg g)]))
