@@ -9,6 +9,7 @@ import PreProcessor as PP
 import GHC.IO (unsafePerformIO)
 import GCLHelper (getVarName)
 import qualified PreProcessor as PP
+import Debug.Trace (trace)
 
 buildEnv :: [VarDeclaration] -> Env
 buildEnv = foldl buildEnv' M.empty
@@ -87,7 +88,12 @@ exprToZ3 env (Exists x e) = do
   x'' <- toApp x'
   body <- exprToZ3 env e
   mkExistsConst [] [x''] body
-exprToZ3 _ (SizeOf e) = mkStringSymbol ('#' : getVarName e) >>= mkIntVar
+exprToZ3 env (SizeOf e) = do
+  let name = '#' : findStr e
+  case M.lookup name env of
+    (Just v) -> mkStringSymbol name >>= mkIntVar
+    Nothing -> error "De fuck do i know"
+  -- mkStringSymbol ('#' : getVarName e) >>= mkIntVar
 exprToZ3 env (RepBy var index value) = do
   e1Z3 <- exprToZ3 env var
   e2Z3 <- exprToZ3 env index
@@ -114,6 +120,12 @@ isValidPath env path = do
   let calculatedWlp = PP.simplify $ wlp path
   return $ isValidExpr env calculatedWlp
 
+isValidPathModel :: Env -> Path -> IO (Either Bool String)
+isValidPathModel env p = do
+  let calculatedWlp = PP.simplify $ wlp p
+
+  return $ isValidExprModel env calculatedWlp
+
 isSatisfiablePath :: Env -> Path -> IO Bool
 isSatisfiablePath env path = do
   let conj = PP.simplify $ conjunctive path
@@ -136,6 +148,22 @@ isValidExpr env e = unsafePerformIO $ do
     Sat -> return False -- Formula is NOT valid
     Unsat -> return True -- Formula is valid
     Undef -> error "Undefined satisfiable result"
+
+isValidExprModel :: Env -> Expr -> Either Bool String
+isValidExprModel env e = unsafePerformIO $ do
+  evalZ3 $ do
+    verdict <-  inverseChecker env e
+    case verdict of
+      Sat -> do
+        (_, model) <- getModel
+        case model of
+          (Just m) -> do
+            modelString <- showModel m
+            return $ Right modelString
+            -- Return the model when satisfiable
+          Nothing -> error "Expected a model but none found for Sat result"
+      Unsat -> return (Left True) -- Formula is valid
+      Undef -> error "Undefined satisfiable result"
 
 -- | Converts WLP Expr to Z3 expression and checks its satisfiability
 checker :: Env -> Expr -> Z3 Result

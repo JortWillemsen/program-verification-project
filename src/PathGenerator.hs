@@ -3,10 +3,8 @@ module PathGenerator where
 
 import qualified GCLParser.GCLDatatype as GCL
 import Types (DCG (Empty, Leaf, SeqNode, Node), Options (k, pruneLen, verbose), Statement (Assume), Env, gclToStatement, Path)
-import Z3.Monad (Z3, evalZ3)
-import Z3Solver (isSatisfiableExpr, buildEnv)
+import Z3Solver (isSatisfiableExpr)
 import WlpGenerator (conjunctive)
-import GCLParser.GCLDatatype (VarDeclaration)
 import Control.Monad (when)
 import Control.Monad.Cont (MonadIO(liftIO))
 
@@ -17,8 +15,8 @@ programToDCG s@(GCL.Assert {}) _          = Leaf s
 programToDCG s@(GCL.Assume {}) _          = Leaf s
 programToDCG s@(GCL.Assign {}) _          = Leaf s
 programToDCG s@(GCL.AAssign {}) _         = Leaf s
-programToDCG s@(GCL.Seq GCL.Skip s2) o    = programToDCG s2 o
-programToDCG s@(GCL.Seq s1 GCL.Skip) o    = programToDCG s1 o
+programToDCG   (GCL.Seq GCL.Skip s2) o    = programToDCG s2 o
+programToDCG   (GCL.Seq s1 GCL.Skip) o    = programToDCG s1 o
 programToDCG   (GCL.Seq s1 s2) o          = combineDCG (programToDCG s1 o) (programToDCG s2 o)
 programToDCG s@(GCL.IfThenElse _ s1 s2) o = Node (programToDCG s1 o) s (programToDCG s2 o)
 programToDCG s@(GCL.While {}) o           = programToDCG (unfold s (k o)) o
@@ -33,11 +31,11 @@ combineDCG (Node l x r) t2 = Node (combineDCG l t2) x (combineDCG r t2)
 
 -- | Unfolding a while to an if, k times
 unfold :: GCL.Stmt -> Int -> GCL.Stmt
-unfold s@(GCL.While e b) k
-  | k <= 0  = GCL.Assume (GCL.OpNeg e)
-  | k > 0   = GCL.IfThenElse e s1 s2
+unfold s@(GCL.While e b) k'
+  | k' <= 0  = GCL.Assume (GCL.OpNeg e)
+  | k' > 0   = GCL.IfThenElse e s1 s2
   where
-    s1 = GCL.Seq b $ unfold s (k-1)
+    s1 = GCL.Seq b $ unfold s (k'-1)
     s2 = GCL.Skip
 
 -- | Converts the DCG to a list of paths
@@ -61,8 +59,8 @@ dcgToPaths dcg env o = dcgToPaths' dcg env []
           return $ pathsThen ++ pathsElse
 
         else do
-          let conjThen = conjunctive $ cur ++ [Assume g]
-          let conjElse = conjunctive $ cur ++ [Assume (GCL.OpNeg g)]
+          let conjThen = conjunctive  $ cur ++ [Assume g]
+          let conjElse = conjunctive  $ cur ++ [Assume (GCL.OpNeg g)]
 
           when (verbose o) $ liftIO $ print conjThen
           when (verbose o) $ liftIO $ print conjElse
@@ -74,26 +72,3 @@ dcgToPaths dcg env o = dcgToPaths' dcg env []
           pathsElse <- if satElse then dcgToPaths' r env' (cur ++ [Assume (GCL.OpNeg g)]) else return []
 
           return $ pathsThen ++ pathsElse
-
-      -- pathsThen <- evalZ3 $ do
-      --   envThen <- buildEnv decls
-      --   when (verbose o) $ liftIO $ print envThen
-      --   resThen <- isSatisfiableExpr envThen conjThen
-      --   return $ if resThen then dcgToPaths' l decls (cur ++ [Assume g]) else return []
-
-      -- pathsElse <- evalZ3 $ do
-      --   envElse <- buildEnv decls
-      --   resElse <- isSatisfiableExpr envElse conjElse
-      --   return $ 
-
-      -- return $ pathsThen ++ pathsElse
-
-      -- -- when (length cur) < (pruneLen o) 
-      --   $ return (dcgToPaths' l env (cur ++ [Assume g])) 
-      --   ++ 
-      --   (dcgToPaths' r env (cur ++ [Assume (GCL.OpNeg g)]))
-
-      -- pathThen <- if satThen then dcgToPaths' l env (cur ++ [Assume g]) else return []
-      -- pathElse <- if satElse then dcgToPaths' r env (cur ++ [Assume (GCL.OpNeg g)]) else return []
-
-      -- return $ pathThen ++ pathElse
