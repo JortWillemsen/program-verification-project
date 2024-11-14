@@ -84,7 +84,7 @@ exprToZ3 env (Forall x e) = do
   body <- exprToZ3 env e
   mkForallConst [] [x''] body
 exprToZ3 env (Exists x e) = do
-  x' <- mkFreshIntVar x
+  x' <- mkStringSymbol x >>= mkIntVar
   x'' <- toApp x'
   body <- exprToZ3 env e
   mkExistsConst [] [x''] body
