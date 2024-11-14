@@ -1,18 +1,4 @@
-minind(a:[]int | r:int) { 
-   assume #a > 0 ;
-   var min:int, i:int {
-       i   := 0;
-       min := a[i]; 
-       r   := i;
-       while i < #a do { 
-          if a[i] < min then {
-             min := a[i];
-             r   := i
-          } 
-          else { skip };
-          i := i + 1
-      }
-   } ;
-   assert (0<= r) && (r < #a) &&
-          (exists i :: ((0<=i && (i< #a)) ==>  (a[i] >= a[r]))) 
+min(x:int, y:[]int | z:int) {
+  x := 1;
+  if (y[i] < y[i]) then { skip } else { skip } ;
 }

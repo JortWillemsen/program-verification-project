@@ -1,23 +1,18 @@
 module Main where
 
-import Control.Monad.IO.Class (MonadIO (liftIO))
-import qualified Data.Map as M
-import GCLParser.GCLDatatype (Expr (..), Program (..))
-import GCLParser.Parser (parseGCLfile)
-import PreProcessor (preprocess)
-import ProgramProcessor (negateExpr, wlp)
-import WLPVerifier (run)
-import Z3.Monad
-  ( Result (..),
-    assert,
-    check,
-    evalZ3,
-    getModel,
-    modelToString,
-  )
-import Z3Solver (createEnv, exprToZ3)
+import Runner (run)
+import Types (Options (..))
 
 main :: IO ()
 main = do
-  isValid <- run "examples/second_test.gcl"
+  let options =
+        Options
+          { verbose = False,
+            k = 10,
+            n = 3,
+            pruneLen = 0
+          }
+
+  isValid <- run options "examples/benchmark/divByN.gcl"
+
   putStrLn $ "Is the program valid? " ++ show isValid

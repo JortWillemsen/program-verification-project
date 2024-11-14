@@ -52,15 +52,13 @@ build-type:         Simple
 -- extra-source-files:
 
 library
-    exposed-modules:    Main
-                      , ProgramProcessor
-                      , DirectedCallGraphProcessor
-                      , PreProcessor
-                      , Z3Solver
-                      , WLPVerifier
-                      , Helper
+    exposed-modules:  PathGenerator
                       , Types
-                      , DCG
+                      , WlpGenerator
+                      , Z3Solver
+                      , PreProcessor
+                      , GCLHelper
+                      , Runner
 
     build-depends:      base   ^>=4.17.2.1
                       , containers
@@ -77,14 +75,13 @@ executable wlp-verifier
     main-is:          Main.hs
 
     -- Modules included in this executable, other than Main.
-    other-modules:  , ProgramProcessor
-                    , DirectedCallGraphProcessor
-                    , PreProcessor
-                    , Z3Solver
-                    , WLPVerifier
-                    , Helper
-                    , Types
-
+    other-modules:    PathGenerator
+                      , Types
+                      , WlpGenerator
+                      , Z3Solver
+                      , PreProcessor
+                      , GCLHelper
+                      , Runner
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
 

@@ -1,0 +1,10 @@
+//Simple as can be
+Simple(x:int | y:int){
+  if (true) then {
+    x:= x+1
+  } else {
+    x:=x-1
+  };
+
+  assert(true)
+}
