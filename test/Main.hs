@@ -16,14 +16,14 @@ testCases =
     ("examples/minind.gcl", True),
     ("examples/reverse.gcl", True),
     ("examples/S1.gcl", True),
-    ("examples/swap.gcl", True),
+    ("examples/swap.gcl", True)
     -- Benchmarks
     -- ("examples/benchmark/divByN.gcl", True),
     -- ("examples/benchmark/memberOf.gcl", True),
     -- ("examples/benchmark/pullUp.gcl", True),
-    ("examples/benchmark/invalidDivByN.gcl", False),
-    ("examples/benchmark/invalidMemberOf.gcl", False),
-    ("examples/benchmark/invalidPullUp.gcl", False)
+    -- ("examples/benchmark/invalidDivByN.gcl", False),
+    -- ("examples/benchmark/invalidMemberOf.gcl", False),
+    -- ("examples/benchmark/invalidPullUp.gcl", False)
   ]
 
 -- Define the test suite

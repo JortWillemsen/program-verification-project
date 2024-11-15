@@ -26,3 +26,19 @@ If the language support is not working properly, try the following:
 2. (Re)open `Main.hs` if you see any errors, or if it is not doing anything at all.
 3. If it is still not working, restart HLS. (<kbd>F1</kbd> -> `Haskell: Restart Haskell LSP Server`).
 4. If this all fails, leave the dev container and reopen it.
+
+## Running the project
+
+Once you have the project running inside a dev container it is ready to use. You can also run the project without a dev container if your environment is setup correctly. 
+
+### The program
+
+To run the normal program you enter a file into `Main.hs` that you would like to check for validity along with the options such as k, n and pruneLength. After that you can type `cabal run` in your terminal and hit enter.
+
+### Testing
+
+To use the testing module you can simply type `cabal test` into the terminal and hit enter. It will output the results to the terminal and also a log file.
+
+### Benchmarking
+
+For the benchmarking you can simply type `cabal bench` into the terminal and hit enter. The output will we written to the terminal and a csv file in the root of the project. Please keep in mind that benchmarking can take extremely long depending on what you are benchmarking.
