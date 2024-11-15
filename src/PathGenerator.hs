@@ -48,8 +48,6 @@ dcgToPaths dcg env o = dcgToPaths' dcg env []
     dcgToPaths' (Leaf x) _ cur = return [cur ++ [gclToStatement x]]
     dcgToPaths' (SeqNode x c) env' cur = dcgToPaths' c env' (cur ++ [gclToStatement x])
     dcgToPaths' (Node l (GCL.IfThenElse g _ _) r) env' cur = do
-      -- make conjunctions
-
       if pruneLen o > length cur
         then do
           pathsThen <- dcgToPaths' l env' (cur ++ [Assume g])
@@ -57,6 +55,7 @@ dcgToPaths dcg env o = dcgToPaths' dcg env []
 
           return $ pathsThen ++ pathsElse
         else do
+          -- Make conjuctions
           let conjThen = conjunctive $ cur ++ [Assume g]
           let conjElse = conjunctive $ cur ++ [Assume (GCL.OpNeg g)]
 

@@ -1,10 +1,11 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+
 module Types where
 
 import qualified Data.Map as M
-import qualified GCLParser.GCLDatatype as GCL
 import GCLParser.GCLDatatype (Type)
+import qualified GCLParser.GCLDatatype as GCL
 
 -- Directed Call Graph (Tree structure)
 data DCG a
@@ -23,12 +24,11 @@ data Statement
 
 type Path = [Statement]
 
-
-data Options = Options 
-  { verbose :: Bool
-  , k :: Int
-  , n :: Int
-  , pruneLen :: Int
+data Options = Options
+  { verbose :: Bool,
+    k :: Int,
+    n :: Int,
+    pruneLen :: Int
   }
 
 instance Show Statement where
@@ -39,7 +39,7 @@ instance Show Statement where
   show (AAssign str e1 e2) = str ++ "[" ++ show e1 ++ "] := " ++ show e2
 
 instance (Show a) => Show (DCG a) where
-  show :: Show a => DCG a -> String
+  show :: (Show a) => DCG a -> String
   show = printDCG
 
 printDCG :: (Show a) => DCG a -> String

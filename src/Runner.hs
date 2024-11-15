@@ -18,13 +18,8 @@ run options file = do
     Right program -> do
       let uniqueProgram = makeUnique program
       let replacedProgram = replaceExperimentParam uniqueProgram "N" (n options)
-
-      -- liftIO $ print replacedProgram
-
       let varDeclarations = getVarDeclarationsProgram replacedProgram
       let dcg = programToDCG (stmt replacedProgram) options
-
-      -- liftIO $ print dcg
 
       let env = buildEnv varDeclarations
 
@@ -33,15 +28,14 @@ run options file = do
 
       paths <- dcgToPaths dcg env options
 
-      when (verbose options) $ liftIO $ putStrLn "Paths: "
-      when (verbose options) $ liftIO $ putStrLn $ concatMap (\s -> show s ++ "\n") paths
+      when (verbose options) $ liftIO $ putStrLn "Number of Paths: "
       when (verbose options) $ liftIO $ print (length paths)
 
       -- Filter out the unfeasible paths
       fPaths <- filterM (isSatisfiablePath env) paths
 
-      -- liftIO $ putStrLn "Feasible Paths: "
-      -- liftIO $ putStrLn $ concatMap (\s -> show s ++ "\n") fPaths
+      when (verbose options) $ liftIO $ putStrLn "Number of Feasible Paths: "
+      when (verbose options) $ liftIO $ print (length fPaths)
 
       -- Check if all feasible paths are valid
       r <- validProgram fPaths env
@@ -49,7 +43,8 @@ run options file = do
       case r of
         Left b -> return b
         Right p -> do
-          -- liftIO $ print p
+          liftIO $ putStrLn "Incorrect path"
+          liftIO $ print p
           return False
 
 validProgram :: [Path] -> Env -> IO (Either Bool Path)
@@ -59,6 +54,7 @@ validProgram (p : ps) env = do
   case valid of
     Left _ -> validProgram ps env
     Right m -> do
-      -- liftIO $ putStr m
+      liftIO $ putStrLn "Input for the program"
+      liftIO $ putStr m
 
       return $ Right p

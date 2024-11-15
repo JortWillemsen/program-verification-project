@@ -13,6 +13,6 @@ main = do
             pruneLen = 0
           }
 
-  isValid <- run options "examples/benchmark/divByN.gcl"
+  isValid <- run options "examples/benchmark/invalidDivByN.gcl"
 
   putStrLn $ "Is the program valid? " ++ show isValid
